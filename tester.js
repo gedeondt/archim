@@ -4,6 +4,23 @@
 const fs = require("fs");
 const path = require("path");
 
+function parsePieceToken(token) {
+  const atIndex = token.lastIndexOf("@");
+  if (atIndex === -1) {
+    return { modulePath: token };
+  }
+
+  const modulePath = token.slice(0, atIndex);
+  const remainder = token.slice(atIndex + 1);
+  const parsedPort = Number.parseInt(remainder, 10);
+
+  if (!Number.isNaN(parsedPort)) {
+    return { modulePath, port: parsedPort };
+  }
+
+  return { modulePath: token };
+}
+
 function parseArgs(argv) {
   const args = { pieces: [] };
   for (let i = 2; i < argv.length; i += 1) {
@@ -13,7 +30,7 @@ function parseArgs(argv) {
       if (!value) {
         throw new Error("--piece flag requires a value");
       }
-      args.pieces.push(value);
+      args.pieces.push(parsePieceToken(value));
     } else if (token === "--help" || token === "-h") {
       args.help = true;
     } else {
@@ -25,13 +42,12 @@ function parseArgs(argv) {
 
 function printHelp() {
   console.log(`MicroSim Tester\n\n` +
-    `Usage: node tester.js --piece ./modules/queue [--piece ./otherPiece.js]\n\n` +
-    `Each piece module can optionally export an async runTests() function\n` +
-    `that returns an object: { passed: number, failed: number, details: [] }.\n` +
-    `If runTests is not present, a smoke-test will instantiate the micro frontend\n` +
-    `definition if available.\n\n` +
+    `Usage: node tester.js --piece ./modules/queue@4200 [--piece ./otherModule@4300]\n\n` +
+    `Each module must provide ./test.js exporting an async run({ baseUrl, port })\n` +
+    `function that returns { passed, failed, details }. The service must be running\n` +
+    `before executing the tester.\n\n` +
     `When called without --piece flags, the tester will load all modules declared\n` +
-    `in modules/manifest.json.`);
+    `in modules/manifest.json and infer base URLs from their configured ports.`);
 }
 
 function logResult(title, result) {
@@ -45,42 +61,40 @@ function logResult(title, result) {
   }
 }
 
-async function smokeTestMicrofrontend(module) {
-  if (!module || !module.microfrontend) {
-    return {
-      passed: 0,
-      failed: 1,
-      details: ["No microfrontend metadata exported"],
-    };
-  }
-  const { tagName, url } = module.microfrontend;
-  if (!tagName || !url) {
-    return {
-      passed: 0,
-      failed: 1,
-      details: ["Microfrontend metadata must include tagName and url"],
-    };
-  }
-  return {
-    passed: 1,
-    failed: 0,
-    details: [`Microfrontend ${tagName} exposed at ${url}`],
-  };
-}
+async function runTestForPiece({ modulePath, port, baseUrl }) {
+  const absoluteModulePath = path.resolve(process.cwd(), modulePath);
+  const testFile = path.join(absoluteModulePath, "test.js");
 
-async function runTestForPiece(modulePath) {
-  const absolutePath = path.resolve(process.cwd(), modulePath);
-  // eslint-disable-next-line global-require, import/no-dynamic-require
-  const pieceModule = require(absolutePath);
-  if (pieceModule && typeof pieceModule.runTests === "function") {
-    const result = await pieceModule.runTests();
-    return {
-      passed: result.passed || 0,
-      failed: result.failed || 0,
-      details: result.details || [],
-    };
+  if (!fs.existsSync(testFile)) {
+    throw new Error(`Expected test file at ${testFile}`);
   }
-  return smokeTestMicrofrontend(pieceModule);
+
+  // eslint-disable-next-line global-require, import/no-dynamic-require
+  const testModule = require(testFile);
+  const runner = typeof testModule === "function" ? testModule : testModule && testModule.run;
+
+  if (typeof runner !== "function") {
+    throw new Error(`Test file ${testFile} must export an async run() function`);
+  }
+
+  const context = {};
+  if (typeof baseUrl === "string") {
+    context.baseUrl = baseUrl;
+  }
+  if (typeof port === "number" && Number.isFinite(port)) {
+    context.port = port;
+    if (!context.baseUrl) {
+      context.baseUrl = `http://localhost:${port}`;
+    }
+  }
+
+  const result = await runner(context);
+
+  return {
+    passed: Number(result && result.passed) || 0,
+    failed: Number(result && result.failed) || 0,
+    details: Array.isArray(result && result.details) ? result.details : [],
+  };
 }
 
 function loadPiecesFromManifest() {
@@ -104,7 +118,21 @@ function loadPiecesFromManifest() {
   }
 
   const modules = manifest.pieces
-    .map((piece) => piece && piece.module)
+    .map((piece) => {
+      if (!piece || typeof piece.module !== "string") {
+        return null;
+      }
+      const piecePort = piece.port;
+      if (typeof piecePort !== "number" || Number.isNaN(piecePort)) {
+        throw new Error(`Piece ${piece.module} in manifest must declare a numeric port`);
+      }
+      const baseUrl = piece.baseUrl || null;
+      return {
+        modulePath: piece.module,
+        port: piecePort,
+        baseUrl: typeof baseUrl === "string" ? baseUrl : undefined,
+      };
+    })
     .filter(Boolean);
 
   if (modules.length === 0) {
@@ -149,16 +177,21 @@ async function main() {
   let totalPassed = 0;
   let totalFailed = 0;
 
-  for (const modulePath of pieces) {
+  for (const piece of pieces) {
+    const titleParts = [piece.modulePath];
+    if (typeof piece.port === "number") {
+      titleParts.push(`@${piece.port}`);
+    }
+    const title = titleParts.join("");
     try {
       // eslint-disable-next-line no-await-in-loop
-      const result = await runTestForPiece(modulePath);
+      const result = await runTestForPiece(piece);
       totalPassed += result.passed;
       totalFailed += result.failed;
-      logResult(modulePath, result);
+      logResult(title, result);
     } catch (error) {
       totalFailed += 1;
-      console.error(`[tester] Error testing ${modulePath}: ${error.stack || error.message}`);
+      console.error(`[tester] Error testing ${title}: ${error.stack || error.message}`);
     }
   }
 

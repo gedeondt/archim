@@ -148,27 +148,6 @@ function start({ port = 4200 } = {}) {
   });
 }
 
-async function runTests() {
-  const queueName = "test-queue";
-  ensureQueue(queueName).push({ message: { hello: "world" } });
-  handleGetMessages({
-    writeHead: () => {},
-    end: () => {},
-  }, queueName);
-  const result = {
-    passed: state.processedCount > 0 ? 1 : 0,
-    failed: state.processedCount > 0 ? 0 : 1,
-    details: [
-      state.processedCount > 0
-        ? "Processed counter increments when reading messages"
-        : "Processed counter did not increment",
-    ],
-  };
-  state.processedCount = 0;
-  queues.clear();
-  return result;
-}
-
 const microfrontend = {
   tagName: "queue-monitor",
   url: "http://localhost:4200/microfrontends/queue-monitor.js",
@@ -176,7 +155,6 @@ const microfrontend = {
 
 module.exports = {
   start,
-  runTests,
   microfrontend,
   metadata: {
     name: "Queue Simulator",
