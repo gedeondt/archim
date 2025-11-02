@@ -1,0 +1,195 @@
+"use strict";
+
+module.exports = String.raw`class QueueMonitor extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+    this.shadowRoot.innerHTML = \`
+<style>
+  :host {
+    display: block;
+    font-family: system-ui, sans-serif;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    padding: 1rem;
+    background: #fff;
+    max-width: 480px;
+  }
+  h2 {
+    margin-top: 0;
+    font-size: 1.1rem;
+  }
+  h3 {
+    margin: 1rem 0 0.5rem;
+    font-size: 1rem;
+  }
+  .count {
+    font-size: 2.5rem;
+    font-weight: bold;
+  }
+  .queues {
+    margin-top: 1rem;
+  }
+  .queue {
+    border-top: 1px solid #e3e3e3;
+    padding: 0.5rem 0;
+  }
+  .queue:first-of-type {
+    border-top: none;
+  }
+  .queue__header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-weight: 600;
+  }
+  .queue__messages {
+    margin: 0.25rem 0 0;
+    padding-left: 1rem;
+    font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    font-size: 0.85rem;
+    color: #333;
+  }
+  .queue__empty {
+    margin-top: 0.25rem;
+    color: #777;
+    font-size: 0.85rem;
+  }
+  .queue__badge {
+    background: #eef3ff;
+    color: #274a8d;
+    border-radius: 999px;
+    padding: 0.1rem 0.5rem;
+    font-size: 0.75rem;
+  }
+  button {
+    margin-top: 1rem;
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 4px;
+    background: #0059b2;
+    color: white;
+    cursor: pointer;
+  }
+</style>
+<h2>Queue Monitor</h2>
+<div class="count" id="count">0</div>
+<h3>Colas registradas</h3>
+<div class="queues" id="queues">Sin colas registradas</div>
+<button id="refresh">Actualizar</button>\`;
+    this._onRefresh = this._onRefresh.bind(this);
+  }
+
+  connectedCallback() {
+    const refreshButton = this.shadowRoot.getElementById('refresh');
+    refreshButton.addEventListener('click', this._onRefresh);
+    this._fetchMetrics();
+    this._fetchQueues();
+    this._interval = setInterval(() => {
+      this._fetchMetrics();
+      this._fetchQueues();
+    }, 5000);
+  }
+
+  disconnectedCallback() {
+    const refreshButton = this.shadowRoot.getElementById('refresh');
+    refreshButton.removeEventListener('click', this._onRefresh);
+    if (this._interval) {
+      clearInterval(this._interval);
+    }
+  }
+
+  _onRefresh() {
+    this._fetchMetrics();
+    this._fetchQueues();
+  }
+
+  async _fetchMetrics() {
+    const endpoint = this.getAttribute('metrics-url') || '/metrics';
+    try {
+      const response = await fetch(endpoint);
+      if (!response.ok) {
+        throw new Error('Metrics request failed');
+      }
+      const data = await response.json();
+      this.shadowRoot.getElementById('count').textContent = data.processedCount ?? '0';
+    } catch (error) {
+      this.shadowRoot.getElementById('count').textContent = 'Error';
+      console.error('[queue-monitor]', error);
+    }
+  }
+
+  async _fetchQueues() {
+    const endpoint = this.getAttribute('queues-url') || '/queues';
+    try {
+      const response = await fetch(endpoint);
+      if (!response.ok) {
+        throw new Error('Queues request failed');
+      }
+      const data = await response.json();
+      const queues = Array.isArray(data.queues) ? data.queues : [];
+      this._renderQueues(queues);
+    } catch (error) {
+      this._renderQueues(null, error);
+      console.error('[queue-monitor]', error);
+    }
+  }
+
+  _renderQueues(queues, error) {
+    const container = this.shadowRoot.getElementById('queues');
+    if (!container) {
+      return;
+    }
+    container.innerHTML = '';
+    if (error) {
+      container.textContent = 'Error al cargar colas';
+      return;
+    }
+    if (!queues || queues.length === 0) {
+      container.textContent = 'Sin colas registradas';
+      return;
+    }
+    queues.forEach((queue) => {
+      const wrapper = document.createElement('div');
+      wrapper.classList.add('queue');
+
+      const header = document.createElement('div');
+      header.classList.add('queue__header');
+
+      const name = document.createElement('span');
+      name.classList.add('queue__name');
+      name.textContent = queue.name || '(sin nombre)';
+
+      const badge = document.createElement('span');
+      badge.classList.add('queue__badge');
+      const total = typeof queue.totalMessages === 'number' ? queue.totalMessages : Array.isArray(queue.messages) ? queue.messages.length : 0;
+      badge.textContent = String(total) + ' mensajes';
+
+      header.appendChild(name);
+      header.appendChild(badge);
+      wrapper.appendChild(header);
+
+      if (Array.isArray(queue.messages) && queue.messages.length > 0) {
+        const list = document.createElement('ul');
+        list.classList.add('queue__messages');
+        queue.messages.forEach((entry) => {
+          const item = document.createElement('li');
+          const receivedAt = entry.receivedAt ? new Date(entry.receivedAt).toLocaleString() : 'Sin fecha';
+          const payload = typeof entry.message === 'object' ? JSON.stringify(entry.message) : String(entry.message);
+          item.textContent = '[' + receivedAt + '] ' + payload;
+          list.appendChild(item);
+        });
+        wrapper.appendChild(list);
+      } else {
+        const empty = document.createElement('div');
+        empty.classList.add('queue__empty');
+        empty.textContent = 'Sin mensajes registrados';
+        wrapper.appendChild(empty);
+      }
+
+      container.appendChild(wrapper);
+    });
+  }
+}
+
+customElements.define('queue-monitor', QueueMonitor);`;
