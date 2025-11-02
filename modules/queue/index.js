@@ -3,6 +3,8 @@
 const http = require("http");
 const url = require("url");
 
+const microfrontendScript = require("./microfrontend");
+
 const queues = new Map();
 const state = {
   processedCount: 0,
@@ -40,7 +42,7 @@ function sendJson(response, statusCode, payload) {
 
 function ensureQueue(name) {
   if (!queues.has(name)) {
-    queues.set(name, []);
+    queues.set(name, { pending: [], history: [] });
   }
   return queues.get(name);
 }
@@ -53,11 +55,18 @@ function handlePostMessage(request, response, queueName) {
         return;
       }
       const queue = ensureQueue(queueName);
-      queue.push({
+      const entry = {
         message: body.message,
         receivedAt: new Date().toISOString(),
+      };
+      queue.pending.push(entry);
+      queue.history.push(entry);
+      sendJson(response, 202, {
+        status: "queued",
+        queue: queueName,
+        size: queue.pending.length,
+        totalMessages: queue.history.length,
       });
-      sendJson(response, 202, { status: "queued", queue: queueName, size: queue.length });
     })
     .catch((error) => {
       sendJson(response, 400, { error: error.message });
@@ -66,9 +75,19 @@ function handlePostMessage(request, response, queueName) {
 
 function handleGetMessages(response, queueName) {
   const queue = ensureQueue(queueName);
-  const messages = queue.splice(0, queue.length);
+  const messages = queue.pending.splice(0, queue.pending.length);
   state.processedCount += messages.length;
   sendJson(response, 200, { queue: queueName, messages });
+}
+
+function handleListQueues(response) {
+  const queuesPayload = Array.from(queues.entries()).map(([name, queue]) => ({
+    name,
+    pendingCount: queue.pending.length,
+    totalMessages: queue.history.length,
+    messages: queue.history.slice(),
+  }));
+  sendJson(response, 200, { queues: queuesPayload });
 }
 
 function handleMetrics(response) {
@@ -76,10 +95,7 @@ function handleMetrics(response) {
 }
 
 function handleMicrofrontend(response) {
-  const script = `class QueueMonitor extends HTMLElement {\n  constructor() {\n    super();\n    this.attachShadow({ mode: 'open' });\n    this.shadowRoot.innerHTML = ` +
-    "`<style>\n  :host {\n    display: block;\n    font-family: system-ui, sans-serif;\n    border: 1px solid #ccc;\n    border-radius: 8px;\n    padding: 1rem;\n    background: #fff;\n  }\n  h2 {\n    margin-top: 0;\n    font-size: 1.1rem;\n  }\n  .count {\n    font-size: 2.5rem;\n    font-weight: bold;\n  }\n  button {\n    margin-top: 1rem;\n    padding: 0.5rem 1rem;\n    border: none;\n    border-radius: 4px;\n    background: #0059b2;\n    color: white;\n    cursor: pointer;\n  }\n</style>\n<h2>Queue Monitor</h2>\n<div class=\"count\" id=\"count\">0</div>\n<button id=\"refresh\">Actualizar</button>`" +
-    `;\n    this._onRefresh = this._onRefresh.bind(this);\n  }\n\n  connectedCallback() {\n    this.shadowRoot.getElementById('refresh').addEventListener('click', this._onRefresh);\n    this._fetchMetrics();\n    this._interval = setInterval(() => this._fetchMetrics(), 5000);\n  }\n\n  disconnectedCallback() {\n    this.shadowRoot.getElementById('refresh').removeEventListener('click', this._onRefresh);\n    if (this._interval) {\n      clearInterval(this._interval);\n    }\n  }\n\n  _onRefresh() {\n    this._fetchMetrics();\n  }\n\n  async _fetchMetrics() {\n    const endpoint = this.getAttribute('metrics-url') || '/metrics';\n    try {\n      const response = await fetch(endpoint);\n      if (!response.ok) {\n        throw new Error('Metrics request failed');\n      }\n      const data = await response.json();\n      this.shadowRoot.getElementById('count').textContent = data.processedCount ?? '0';\n    } catch (error) {\n      this.shadowRoot.getElementById('count').textContent = 'Error';\n      console.error('[queue-monitor]', error);\n    }\n  }\n}\n\ncustomElements.define('queue-monitor', QueueMonitor);`;
-
+  const script = microfrontendScript;
   response.writeHead(200, {
     "Content-Type": "application/javascript",
     "Access-Control-Allow-Origin": "*",
@@ -103,6 +119,11 @@ function requestListener(request, response) {
 
   if (parsedUrl.pathname === "/metrics") {
     handleMetrics(response);
+    return;
+  }
+
+  if (parsedUrl.pathname === "/queues" && method === "GET") {
+    handleListQueues(response);
     return;
   }
 
