@@ -3,6 +3,10 @@
     {
       "module": "./modules/queue",
       "port": 4200
+    },
+    {
+      "module": "./modules/dashboard",
+      "port": 4300
     }
   ]
 }
