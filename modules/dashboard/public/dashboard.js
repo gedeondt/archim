@@ -1,5 +1,7 @@
-import React, { useEffect, useMemo, useState } from "https://esm.sh/react@18";
+import React, { useEffect, useMemo, useState, useRef } from "https://esm.sh/react@18";
 import { createRoot } from "https://esm.sh/react-dom@18/client";
+
+const { createElement } = React;
 
 const DEFAULT_WIDGETS = [
   {
@@ -28,7 +30,7 @@ function loadMicrofrontendScript(url) {
 
 function WidgetContainer({ widget }) {
   const [error, setError] = useState(null);
-  const containerRef = React.useRef(null);
+  const containerRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -67,19 +69,22 @@ function WidgetContainer({ widget }) {
   }, [widget]);
 
   if (error) {
-    return (
-      <div className="widget widget-error">
-        <header>{widget.title}</header>
-        <pre>{error}</pre>
-      </div>
+    return createElement(
+      "div",
+      { className: "widget widget-error" },
+      createElement("header", null, widget.title),
+      createElement("pre", null, error)
     );
   }
 
-  return (
-    <div className="widget">
-      <header>{widget.title}</header>
-      <section ref={containerRef} className="widget-body" />
-    </div>
+  return createElement(
+    "div",
+    { className: "widget" },
+    createElement("header", null, widget.title),
+    createElement("section", {
+      ref: containerRef,
+      className: "widget-body",
+    })
   );
 }
 
@@ -113,12 +118,18 @@ export function DashboardApp({ initialWidgets = DEFAULT_WIDGETS }) {
   const widgets = useDashboardConfig(initialWidgets);
   const gridTemplate = useMemo(() => `repeat(${Math.max(1, widgets.length)}, 1fr)`, [widgets.length]);
 
-  return (
-    <div className="dashboard" style={{ display: "grid", gridTemplateColumns: gridTemplate, gap: "1rem" }}>
-      {widgets.map((widget) => (
-        <WidgetContainer key={widget.id} widget={widget} />
-      ))}
-    </div>
+  return createElement(
+    "div",
+    {
+      className: "dashboard",
+      style: { display: "grid", gridTemplateColumns: gridTemplate, gap: "1rem" },
+    },
+    widgets.map((widget) =>
+      createElement(WidgetContainer, {
+        widget,
+        key: widget.id,
+      })
+    )
   );
 }
 
@@ -127,7 +138,11 @@ export function bootstrapDashboard(domNode, options = {}) {
     throw new Error("A DOM node is required to bootstrap the dashboard");
   }
   const root = createRoot(domNode);
-  root.render(<DashboardApp initialWidgets={options.widgets || DEFAULT_WIDGETS} />);
+  root.render(
+    createElement(DashboardApp, {
+      initialWidgets: options.widgets || DEFAULT_WIDGETS,
+    })
+  );
   return root;
 }
 
