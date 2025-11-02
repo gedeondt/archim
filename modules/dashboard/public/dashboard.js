@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useRef } from "https://esm.sh/react@18";
+import React, { useEffect, useState, useRef } from "https://esm.sh/react@18";
 import { createRoot } from "https://esm.sh/react-dom@18/client";
 
 const { createElement } = React;
@@ -71,20 +71,44 @@ function WidgetContainer({ widget }) {
   if (error) {
     return createElement(
       "div",
-      { className: "widget widget-error" },
-      createElement("header", null, widget.title),
-      createElement("pre", null, error)
+      { className: "col-12 col-md-6 col-xl-4" },
+      createElement(
+        "div",
+        { className: "card h-100 border-danger-subtle" },
+        createElement(
+          "div",
+          { className: "card-header bg-danger text-white" },
+          widget.title
+        ),
+        createElement(
+          "div",
+          { className: "card-body" },
+          createElement("pre", { className: "mb-0 text-danger" }, error)
+        )
+      )
     );
   }
 
   return createElement(
     "div",
-    { className: "widget" },
-    createElement("header", null, widget.title),
-    createElement("section", {
-      ref: containerRef,
-      className: "widget-body",
-    })
+    { className: "col-12 col-md-6 col-xl-4" },
+    createElement(
+      "div",
+      { className: "card h-100 shadow-sm border-0" },
+      createElement(
+        "div",
+        { className: "card-header bg-body-secondary fw-semibold text-uppercase" },
+        widget.title
+      ),
+      createElement(
+        "div",
+        { className: "card-body" },
+        createElement("section", {
+          ref: containerRef,
+          className: "d-flex flex-column gap-2",
+        })
+      )
+    )
   );
 }
 
@@ -116,14 +140,10 @@ function useDashboardConfig(initialWidgets) {
 
 export function DashboardApp({ initialWidgets = DEFAULT_WIDGETS }) {
   const widgets = useDashboardConfig(initialWidgets);
-  const gridTemplate = useMemo(() => `repeat(${Math.max(1, widgets.length)}, 1fr)`, [widgets.length]);
 
   return createElement(
     "div",
-    {
-      className: "dashboard",
-      style: { display: "grid", gridTemplateColumns: gridTemplate, gap: "1rem" },
-    },
+    { className: "row g-4" },
     widgets.map((widget) =>
       createElement(WidgetContainer, {
         widget,
