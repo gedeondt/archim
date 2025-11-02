@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>MicroSim Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: system-ui, sans-serif;
+        background: #f4f5f7;
+        color: #1f2933;
+      }
+
+      body {
+        margin: 0;
+        padding: 2rem;
+      }
+
+      h1 {
+        margin-top: 0;
+      }
+
+      .dashboard-wrapper {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+      }
+
+      .dashboard {
+        min-height: 300px;
+      }
+
+      footer {
+        font-size: 0.85rem;
+        color: #52606d;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="dashboard-wrapper">
+      <header>
+        <h1>MicroSim Dashboard</h1>
+        <p>Visualización de las piezas activas y sus micro frontends.</p>
+      </header>
+      <main id="microsim-dashboard" class="dashboard" role="main"></main>
+      <footer>Dashboard sirviendo widgets desde los módulos configurados.</footer>
+    </div>
+    <script type="module" src="/dashboard.js"></script>
+  </body>
+</html>
