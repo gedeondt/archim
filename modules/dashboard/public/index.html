@@ -6,146 +6,39 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link
       rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+      crossorigin="anonymous"
     />
-    <style>
-      :root {
-        color-scheme: light;
-        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-        --color-bg: #e2e8f0;
-        --color-surface: #ffffff;
-        --color-surface-soft: #f8fafc;
-        --color-border: #cbd5f5;
-        --color-shadow: rgba(15, 23, 42, 0.08);
-        --color-text: #0f172a;
-        --color-text-muted: #475569;
-        --color-accent: #2563eb;
-        background: var(--color-bg);
-        color: var(--color-text);
-      }
-
-      body {
-        margin: 0;
-        min-height: 100vh;
-        background: linear-gradient(180deg, #f1f5f9 0%, var(--color-bg) 100%);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 2.5rem 1.5rem;
-        color: var(--color-text);
-      }
-
-      .dashboard-wrapper {
-        width: min(1100px, 100%);
-        display: flex;
-        flex-direction: column;
-        gap: 2rem;
-      }
-
-      .dashboard-card {
-        background: var(--color-surface);
-        border-radius: 18px;
-        border: 1px solid var(--color-border);
-        box-shadow: 0 20px 40px -28px var(--color-shadow);
-        padding: 2.25rem;
-      }
-
-      header h1 {
-        margin: 0 0 0.75rem;
-        font-size: clamp(1.8rem, 2.4vw, 2.4rem);
-        color: var(--color-text);
-      }
-
-      header p {
-        margin: 0;
-        color: var(--color-text-muted);
-        font-size: 1rem;
-      }
-
-      .dashboard {
-        min-height: 320px;
-      }
-
-      .widget {
-        background: var(--color-surface-soft);
-        border-radius: 16px;
-        border: 1px solid #dbeafe;
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 12px 20px -16px var(--color-shadow);
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-      }
-
-      .widget > header {
-        padding: 1rem 1.25rem;
-        border-bottom: 1px solid #bfdbfe;
-        font-weight: 600;
-        letter-spacing: 0.01em;
-        color: var(--color-accent);
-        text-transform: uppercase;
-        font-size: 0.95rem;
-      }
-
-      .widget-body {
-        flex: 1;
-        padding: 1.25rem;
-        color: var(--color-text);
-      }
-
-      .widget-body p,
-      .widget-body span,
-      .widget-body label {
-        color: inherit;
-      }
-
-      footer {
-        font-size: 0.9rem;
-        color: var(--color-text-muted);
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-      }
-
-      footer svg {
-        width: 18px;
-        height: 18px;
-        color: #16a34a;
-      }
-
-      @media (max-width: 768px) {
-        body {
-          padding: 2rem 1rem;
-        }
-
-        .dashboard-card {
-          padding: 1.75rem;
-        }
-
-        .widget > header {
-          font-size: 0.9rem;
-        }
-      }
-    </style>
   </head>
-  <body>
-    <div class="dashboard-wrapper">
-      <section class="dashboard-card">
-        <header>
-          <h1>MicroSim Dashboard</h1>
-          <p>Visualización de las piezas activas y sus micro frontends.</p>
+  <body class="bg-light text-dark">
+    <div class="container py-5">
+      <section class="card shadow-sm border-0 rounded-4 p-4 p-md-5 mb-4">
+        <header class="mb-4">
+          <h1 class="h2 fw-semibold mb-2">MicroSim Dashboard</h1>
+          <p class="text-secondary mb-0">
+            Visualización de las piezas activas y sus micro frontends.
+          </p>
         </header>
-        <main id="microsim-dashboard" class="dashboard" role="main"></main>
+        <main
+          id="microsim-dashboard"
+          class="dashboard min-vh-50"
+          role="main"
+        ></main>
       </section>
-      <footer>
+      <footer class="d-flex align-items-center gap-2 text-secondary">
         <svg
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 20 20"
           fill="currentColor"
           aria-hidden="true"
+          width="18"
+          height="18"
+          class="text-success"
         >
           <path
             fill-rule="evenodd"
-            d="M10.75 2.75a.75.75 0 0 0-1.5 0v5.69L6.53 5.72a.75.75 0 1 0-1.06 1.06l3.97 3.97a.75.75 0 0 0 1.06 0l3.97-3.97a.75.75 0 0 0-1.06-1.06L10.75 8.44V2.75ZM4.75 12a.75.75 0 0 0-1.5 0v2.25A2.75 2.75 0 0 0 6 17h8a2.75 2.75 0 0 0 2.75-2.75V12a.75.75 0 0 0-1.5 0v2.25c0 .69-.56 1.25-1.25 1.25H6c-.69 0-1.25-.56-1.25-1.25V12Z"
+            d="M10.75 2.75a.75.75 0 0 0-1.5 0v5.69L6.53 5.72a.75.75 0 1 0-1.06 1.06l3.97 3.97a.75.75 0 0 0 1.06 0l3.97-3.97a.75 0 0 0-1.06-1.06L10.75 8.44V2.75ZM4.75 12a.75.75 0 0 0-1.5 0v2.25A2.75 2.75 0 0 0 6 17h8a2.75 2.75 0 0 0 2.75-2.75V12a.75.75 0 0 0-1.5 0v2.25c0 .69-.56 1.25-1.25 1.25H6c-.69 0-1.25-.56-1.25-1.25V12Z"
             clip-rule="evenodd"
           />
         </svg>
