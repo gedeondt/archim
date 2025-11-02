@@ -21,4 +21,11 @@
 - Todos los servicios deben documentar sus eventos y APIs.
 - Se establece un estándar común de eventos para la comunicación entre servicios.
 
+## Simulación de Fallos
+- Todos los componentes operarán en una escala de errores de 0 a 3.
+  - 0: Operación perfecta, sin fallos.
+  - 1: Fallos ocasionales leves (por ejemplo, pérdida de pocos mensajes en una cola).
+  - 2: Fallos frecuentes (pérdida de muchos mensajes, latencia alta, etc.).
+  - 3: Fallos graves (conexiones caídas, indisponibilidad total por momentos).
+
 ¡Bienvenidos a MicroSim, donde la arquitectura se diseña jugando!
