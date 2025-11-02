@@ -24,7 +24,7 @@ function parseArgs(argv) {
 
 function printHelp() {
   console.log(`MicroSim Tester\n\n` +
-    `Usage: node tester.js --piece ./queueSimulator.js [--piece ./otherPiece.js]\n\n` +
+    `Usage: node tester.js --piece ./modules/queue [--piece ./otherPiece.js]\n\n` +
     `Each piece module can optionally export an async runTests() function\n` +
     `that returns an object: { passed: number, failed: number, details: [] }.\n` +
     `If runTests is not present, a smoke-test will instantiate the micro frontend\n` +

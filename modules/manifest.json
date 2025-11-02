@@ -1,0 +1,8 @@
+{
+  "pieces": [
+    {
+      "module": "./modules/queue",
+      "port": 4200
+    }
+  ]
+}

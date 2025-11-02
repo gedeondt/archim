@@ -17,6 +17,14 @@
 - Cada servicio incluye un script de test y exporta un micro frontend.
 - Todos los micro frontends podrán ser embebidos en un panel de control web, mostrando sus datos.
 
+## Estructura de Módulos
+- Cada pieza de infraestructura vive en `./modules/<nombre>` para mantener el código agrupado.
+- La cola en memoria se encuentra ahora en `./modules/queue` junto a su micro frontend.
+
+## Puesta en Marcha
+- Ejecuta `node launcher.js` sin parámetros para arrancar todas las piezas descritas en `./modules/manifest.json`.
+- El manifest describe los módulos y puertos usados por defecto; puede personalizarse o complementarse con `--config` o `--piece`.
+
 ## Eventos y APIs
 - Todos los servicios deben documentar sus eventos y APIs.
 - Se establece un estándar común de eventos para la comunicación entre servicios.

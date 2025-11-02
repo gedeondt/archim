@@ -5,6 +5,7 @@ const fs = require("fs");
 const path = require("path");
 
 const DEFAULT_PORT_BASE = 4100;
+const DEFAULT_MANIFEST_PATH = path.join(__dirname, "modules", "manifest.json");
 
 function parseArgs(argv) {
   const args = { pieces: [] };
@@ -36,9 +37,11 @@ function printHelp() {
     `Usage: node launcher.js [--config path] [--piece modulePath...]\n\n` +
     `Options:\n` +
     `  --config, -c  Path to a JSON file that lists the pieces to boot.\n` +
-    `                { \\"pieces\\": [{ \\"module\\": \\"./queueSimulator.js\\", \\"port\\": 4200 }] }\n` +
+    `                { \\"pieces\\": [{ \\"module\\": \\"./modules/queue\\", \\"port\\": 4200 }] }\n` +
     `  --piece, -p   Direct path to a piece module. Can be passed multiple times.\n` +
     `  --help, -h    Display this message.\n\n` +
+    `If no pieces are provided the launcher will load ./modules/manifest.json\n` +
+    `and start every infrastructure component listed there.\n\n` +
     `Each piece module must export a async start(options) function that returns\n` +
     `an object with at least a stop() method.`);
 }
@@ -112,7 +115,19 @@ async function main() {
   }
 
   if (pieces.length === 0) {
-    console.error("[launcher] No pieces specified. Use --config or --piece.");
+    try {
+      const defaultPieces = await loadPiecesFromConfig(DEFAULT_MANIFEST_PATH);
+      if (defaultPieces.length > 0) {
+        pieces = defaultPieces;
+        console.info(`[launcher] Loaded default manifest from ${DEFAULT_MANIFEST_PATH}`);
+      }
+    } catch (error) {
+      console.error(`[launcher] Failed to load default manifest: ${error.message}`);
+    }
+  }
+
+  if (pieces.length === 0) {
+    console.error("[launcher] No pieces specified. Use --config, --piece or keep ./modules/manifest.json available.");
     process.exit(1);
   }
 
