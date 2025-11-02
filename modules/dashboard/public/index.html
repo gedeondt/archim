@@ -12,18 +12,27 @@
       :root {
         color-scheme: light;
         font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-        background: #f0f4f8;
-        color: #1f2933;
+        --color-bg: #e2e8f0;
+        --color-surface: #ffffff;
+        --color-surface-soft: #f8fafc;
+        --color-border: #cbd5f5;
+        --color-shadow: rgba(15, 23, 42, 0.08);
+        --color-text: #0f172a;
+        --color-text-muted: #475569;
+        --color-accent: #2563eb;
+        background: var(--color-bg);
+        color: var(--color-text);
       }
 
       body {
         margin: 0;
         min-height: 100vh;
-        background: radial-gradient(circle at top, #ffffff 0%, #edf2f7 60%, #e2e8f0 100%);
+        background: linear-gradient(180deg, #f1f5f9 0%, var(--color-bg) 100%);
         display: flex;
         align-items: center;
         justify-content: center;
         padding: 2.5rem 1.5rem;
+        color: var(--color-text);
       }
 
       .dashboard-wrapper {
@@ -34,22 +43,23 @@
       }
 
       .dashboard-card {
-        background: rgba(255, 255, 255, 0.85);
+        background: var(--color-surface);
         border-radius: 18px;
-        border: 1px solid rgba(148, 163, 184, 0.25);
-        box-shadow: 0 24px 40px -24px rgba(15, 23, 42, 0.35);
-        backdrop-filter: blur(4px);
+        border: 1px solid var(--color-border);
+        box-shadow: 0 20px 40px -28px var(--color-shadow);
         padding: 2.25rem;
       }
 
       header h1 {
         margin: 0 0 0.75rem;
         font-size: clamp(1.8rem, 2.4vw, 2.4rem);
+        color: var(--color-text);
       }
 
       header p {
         margin: 0;
-        color: #475569;
+        color: var(--color-text-muted);
+        font-size: 1rem;
       }
 
       .dashboard {
@@ -57,10 +67,10 @@
       }
 
       .widget {
-        background: linear-gradient(145deg, #f8fafc, #ffffff);
+        background: var(--color-surface-soft);
         border-radius: 16px;
-        border: 1px solid rgba(226, 232, 240, 0.9);
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 18px 28px -18px rgba(30, 64, 175, 0.45);
+        border: 1px solid #dbeafe;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 12px 20px -16px var(--color-shadow);
         display: flex;
         flex-direction: column;
         overflow: hidden;
@@ -68,10 +78,10 @@
 
       .widget > header {
         padding: 1rem 1.25rem;
-        border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+        border-bottom: 1px solid #bfdbfe;
         font-weight: 600;
         letter-spacing: 0.01em;
-        color: #1d4ed8;
+        color: var(--color-accent);
         text-transform: uppercase;
         font-size: 0.95rem;
       }
@@ -79,11 +89,18 @@
       .widget-body {
         flex: 1;
         padding: 1.25rem;
+        color: var(--color-text);
+      }
+
+      .widget-body p,
+      .widget-body span,
+      .widget-body label {
+        color: inherit;
       }
 
       footer {
         font-size: 0.9rem;
-        color: #475569;
+        color: var(--color-text-muted);
         display: flex;
         align-items: center;
         gap: 0.5rem;
@@ -92,7 +109,7 @@
       footer svg {
         width: 18px;
         height: 18px;
-        color: #22c55e;
+        color: #16a34a;
       }
 
       @media (max-width: 768px) {
