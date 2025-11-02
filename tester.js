@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 "use strict";
 
+const fs = require("fs");
 const path = require("path");
 
 function parseArgs(argv) {
@@ -28,7 +29,9 @@ function printHelp() {
     `Each piece module can optionally export an async runTests() function\n` +
     `that returns an object: { passed: number, failed: number, details: [] }.\n` +
     `If runTests is not present, a smoke-test will instantiate the micro frontend\n` +
-    `definition if available.`);
+    `definition if available.\n\n` +
+    `When called without --piece flags, the tester will load all modules declared\n` +
+    `in modules/manifest.json.`);
 }
 
 function logResult(title, result) {
@@ -80,6 +83,37 @@ async function runTestForPiece(modulePath) {
   return smokeTestMicrofrontend(pieceModule);
 }
 
+function loadPiecesFromManifest() {
+  const manifestPath = path.resolve(process.cwd(), "modules/manifest.json");
+  let manifestRaw;
+  try {
+    manifestRaw = fs.readFileSync(manifestPath, "utf8");
+  } catch (error) {
+    throw new Error(`Unable to read manifest at ${manifestPath}: ${error.message}`);
+  }
+
+  let manifest;
+  try {
+    manifest = JSON.parse(manifestRaw);
+  } catch (error) {
+    throw new Error(`Manifest at ${manifestPath} contains invalid JSON: ${error.message}`);
+  }
+
+  if (!manifest.pieces || !Array.isArray(manifest.pieces)) {
+    throw new Error(`Manifest at ${manifestPath} must define an array property "pieces"`);
+  }
+
+  const modules = manifest.pieces
+    .map((piece) => piece && piece.module)
+    .filter(Boolean);
+
+  if (modules.length === 0) {
+    throw new Error(`Manifest at ${manifestPath} does not define any modules.`);
+  }
+
+  return modules;
+}
+
 async function main() {
   let parsedArgs;
   try {
@@ -90,18 +124,32 @@ async function main() {
     process.exit(1);
   }
 
-  if (parsedArgs.help || parsedArgs.pieces.length === 0) {
+  if (parsedArgs.help) {
     printHelp();
-    if (parsedArgs.help) {
-      process.exit(0);
+    process.exit(0);
+  }
+
+  let pieces = parsedArgs.pieces;
+
+  if (pieces.length === 0) {
+    try {
+      pieces = loadPiecesFromManifest();
+    } catch (error) {
+      console.error(`[tester] ${error.message}`);
+      process.exit(1);
     }
+  }
+
+  if (pieces.length === 0) {
+    console.error("[tester] No modules specified to test.");
+    printHelp();
     process.exit(1);
   }
 
   let totalPassed = 0;
   let totalFailed = 0;
 
-  for (const modulePath of parsedArgs.pieces) {
+  for (const modulePath of pieces) {
     try {
       // eslint-disable-next-line no-await-in-loop
       const result = await runTestForPiece(modulePath);
