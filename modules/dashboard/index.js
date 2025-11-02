@@ -16,6 +16,7 @@ const DEFAULT_WIDGETS = [
     tagName: "queue-monitor",
     props: {
       "metrics-url": "http://localhost:4200/metrics",
+      "queues-url": "http://localhost:4200/queues",
     },
   },
 ];
