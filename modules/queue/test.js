@@ -31,8 +31,14 @@ async function run({ baseUrl, port } = {}) {
 
   async function step(title, fn) {
     try {
-      await fn();
-      details.push(`✅ ${title}`);
+      const result = await fn();
+      if (result && typeof result === "object" && result !== null && "detail" in result) {
+        details.push(`✅ ${title} (${result.detail})`);
+      } else if (typeof result === "string" && result.trim().length > 0) {
+        details.push(`✅ ${title} (${result.trim()})`);
+      } else {
+        details.push(`✅ ${title}`);
+      }
       passed += 1;
     } catch (error) {
       details.push(`❌ ${title}: ${error.message}`);
@@ -165,6 +171,57 @@ async function run({ baseUrl, port } = {}) {
     assert.equal(spacedQueueEntry.pendingCount, 0, "La cola con espacios debe quedar vacía tras consumirla");
     assert.equal(spacedQueueEntry.messages.length, 1, "El historial debe contener un mensaje");
     assert.deepEqual(spacedQueueEntry.messages[0].message, expectedSecondaryMessage);
+  });
+
+  await step("mini prueba de carga con 1000 mensajes distribuidos en 10 colas", async () => {
+    const loadTestQueueCount = 10;
+    const totalLoadTestMessages = 1000;
+    const baseLoadTestQueueName = `${queueName}-carga`;
+    const messagesPerQueue = Math.floor(totalLoadTestMessages / loadTestQueueCount);
+    const remainderMessages = totalLoadTestMessages % loadTestQueueCount;
+
+    const loadTestQueues = Array.from({ length: loadTestQueueCount }, (_, index) => {
+      const name = `${baseLoadTestQueueName}-${index}`;
+      const url = `${serviceBaseUrl}/queues/${encodeURIComponent(name)}/messages`;
+      const targetMessages = messagesPerQueue + (index < remainderMessages ? 1 : 0);
+      return { name, url, targetMessages };
+    });
+
+    const startTime = Date.now();
+    let sentMessages = 0;
+
+    for (const { name, url, targetMessages } of loadTestQueues) {
+      for (let i = 0; i < targetMessages; i += 1) {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: {
+              tipo: "prueba-carga",
+              cola: name,
+              indice: sentMessages,
+            },
+          }),
+        });
+        assert.equal(response.status, 202, `POST ${url} debe devolver 202 durante la prueba de carga`);
+        const body = await parseJson(response);
+        assert.equal(body.queue, name, "La respuesta debe indicar la cola destinataria");
+        assert.equal(body.status, "queued", "El estado debe confirmar la encolación del mensaje");
+        sentMessages += 1;
+      }
+    }
+
+    assert.equal(
+      sentMessages,
+      totalLoadTestMessages,
+      "La prueba de carga debe enviar exactamente el número previsto de mensajes",
+    );
+
+    const elapsedMs = Date.now() - startTime;
+    const averageMs = elapsedMs / totalLoadTestMessages;
+    return {
+      detail: `tiempo total ${elapsedMs} ms, media ${averageMs.toFixed(2)} ms por mensaje`,
+    };
   });
 
   await step("el microfrontend está disponible y muestra colas", async () => {
