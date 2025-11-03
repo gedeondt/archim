@@ -3,7 +3,7 @@ import { createRoot } from "https://esm.sh/react-dom@18/client";
 
 const { createElement } = React;
 
-const DEFAULT_WIDGETS = [
+const DEFAULT_MODULE_WIDGETS = [
   {
     id: "queue-monitor",
     title: "Queue Monitor",
@@ -38,6 +38,36 @@ const DEFAULT_WIDGETS = [
     },
   },
 ];
+
+const DEFAULT_DASHBOARD_CONFIG = {
+  moduleWidgets: DEFAULT_MODULE_WIDGETS,
+  architectureWidgets: [],
+};
+
+function normalizeDashboardConfig(config) {
+  const source = config && typeof config === "object" ? config : {};
+  const moduleWidgetsSource = Array.isArray(source.moduleWidgets)
+    ? source.moduleWidgets
+    : Array.isArray(source.widgets)
+      ? source.widgets
+      : DEFAULT_MODULE_WIDGETS;
+
+  const architectureWidgetsSource = Array.isArray(source.architectureWidgets)
+    ? source.architectureWidgets
+    : Array.isArray(source.architecture)
+      ? source.architecture
+      : [];
+
+  return {
+    moduleWidgets:
+      Array.isArray(moduleWidgetsSource) && moduleWidgetsSource.length > 0
+        ? moduleWidgetsSource
+        : DEFAULT_MODULE_WIDGETS,
+    architectureWidgets: Array.isArray(architectureWidgetsSource)
+      ? architectureWidgetsSource
+      : [],
+  };
+}
 
 function loadMicrofrontendScript(url) {
   return new Promise((resolve, reject) => {
@@ -139,8 +169,8 @@ function WidgetContainer({ widget }) {
   );
 }
 
-function useDashboardConfig(initialWidgets) {
-  const [widgets, setWidgets] = useState(initialWidgets);
+function useDashboardConfig(initialConfig = DEFAULT_DASHBOARD_CONFIG) {
+  const [config, setConfig] = useState(() => normalizeDashboardConfig(initialConfig));
 
   useEffect(() => {
     async function fetchConfig() {
@@ -150,10 +180,8 @@ function useDashboardConfig(initialWidgets) {
           throw new Error(`Failed to fetch dashboard configuration: ${response.status}`);
         }
         const data = await response.json();
-        if (!Array.isArray(data.widgets)) {
-          throw new Error("Dashboard configuration must provide a widgets array");
-        }
-        setWidgets(data.widgets);
+        const normalized = normalizeDashboardConfig(data);
+        setConfig(normalized);
       } catch (error) {
         console.warn(`[dashboard] ${error.message}. Falling back to default widgets.`);
       }
@@ -162,20 +190,100 @@ function useDashboardConfig(initialWidgets) {
     fetchConfig();
   }, []);
 
-  return widgets;
+  return config;
 }
 
-export function DashboardApp({ initialWidgets = DEFAULT_WIDGETS }) {
-  const widgets = useDashboardConfig(initialWidgets);
+function TabNavigation({ activeTab, onSelect, moduleCount, architectureCount }) {
+  const tabs = [
+    { id: "modules", label: "Módulos", count: moduleCount },
+    { id: "architecture", label: "Arquitectura", count: architectureCount },
+  ];
 
   return createElement(
-    "div",
-    { className: "row g-4" },
-    widgets.map((widget) =>
-      createElement(WidgetContainer, {
-        widget,
-        key: widget.id,
-      })
+    "ul",
+    { className: "nav nav-pills mb-4 flex-wrap" },
+    tabs.map((tab) =>
+      createElement(
+        "li",
+        { className: "nav-item me-2 mb-2", key: tab.id },
+        createElement(
+          "button",
+          {
+            type: "button",
+            className: `nav-link${activeTab === tab.id ? " active" : ""}`,
+            onClick: () => onSelect(tab.id),
+          },
+          tab.label,
+          createElement(
+            "span",
+            { className: "badge text-bg-secondary ms-2" },
+            String(tab.count)
+          )
+        )
+      )
+    )
+  );
+}
+
+export function DashboardApp({ initialConfig = DEFAULT_DASHBOARD_CONFIG }) {
+  const [activeTab, setActiveTab] = useState("modules");
+  const { moduleWidgets, architectureWidgets } = useDashboardConfig(initialConfig);
+
+  useEffect(() => {
+    if (
+      activeTab === "modules" &&
+      (!Array.isArray(moduleWidgets) || moduleWidgets.length === 0) &&
+      Array.isArray(architectureWidgets) &&
+      architectureWidgets.length > 0
+    ) {
+      setActiveTab("architecture");
+    }
+  }, [activeTab, moduleWidgets, architectureWidgets]);
+
+  const tabs = {
+    modules: Array.isArray(moduleWidgets) ? moduleWidgets : [],
+    architecture: Array.isArray(architectureWidgets) ? architectureWidgets : [],
+  };
+
+  const activeWidgets = tabs[activeTab] || tabs.modules;
+  const emptyMessages = {
+    modules: "No hay microfrontends configurados para los módulos.",
+    architecture: "No hay microfrontends configurados para la arquitectura desplegada.",
+  };
+
+  const hasWidgets = activeWidgets.length > 0;
+
+  return createElement(
+    React.Fragment,
+    null,
+    createElement(TabNavigation, {
+      activeTab,
+      onSelect: setActiveTab,
+      moduleCount: tabs.modules.length,
+      architectureCount: tabs.architecture.length,
+    }),
+    createElement(
+      "div",
+      { className: "row g-4" },
+      hasWidgets
+        ? activeWidgets.map((widget) =>
+            createElement(WidgetContainer, {
+              widget,
+              key: widget.id,
+            })
+          )
+        : createElement(
+            "div",
+            { className: "col-12" },
+            createElement(
+              "div",
+              {
+                className:
+                  "alert alert-light border text-center text-secondary mb-0",
+              },
+              emptyMessages[activeTab] || "No hay microfrontends configurados."
+            )
+          )
     )
   );
 }
@@ -187,7 +295,18 @@ export function bootstrapDashboard(domNode, options = {}) {
   const root = createRoot(domNode);
   root.render(
     createElement(DashboardApp, {
-      initialWidgets: options.widgets || DEFAULT_WIDGETS,
+      initialConfig: normalizeDashboardConfig({
+        moduleWidgets: Array.isArray(options.moduleWidgets)
+          ? options.moduleWidgets
+          : Array.isArray(options.widgets)
+            ? options.widgets
+            : DEFAULT_MODULE_WIDGETS,
+        architectureWidgets: Array.isArray(options.architectureWidgets)
+          ? options.architectureWidgets
+          : Array.isArray(options.architecture)
+            ? options.architecture
+            : [],
+      }),
     })
   );
   return root;

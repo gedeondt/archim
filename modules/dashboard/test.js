@@ -54,12 +54,24 @@ async function run({ baseUrl, port } = {}) {
     assert.equal(response.status, 200, "GET /dashboard-config.json debe responder 200");
     const config = await response.json();
     assert.ok(Array.isArray(config.widgets), "La configuración debe incluir un array widgets");
-    assert.ok(config.widgets.length > 0, "Debe existir al menos un widget");
-    for (const widget of config.widgets) {
+    assert.ok(Array.isArray(config.moduleWidgets), "La configuración debe incluir moduleWidgets");
+    assert.ok(config.moduleWidgets.length > 0, "Debe existir al menos un widget de módulos");
+    const architectureWidgets = Array.isArray(config.architectureWidgets)
+      ? config.architectureWidgets
+      : [];
+
+    for (const widget of config.moduleWidgets) {
       assert.ok(widget.id, "Cada widget debe tener id");
       assert.ok(widget.title, "Cada widget debe tener title");
       assert.ok(widget.url, "Cada widget debe tener url");
       assert.ok(widget.tagName, "Cada widget debe tener tagName");
+    }
+
+    for (const widget of architectureWidgets) {
+      assert.ok(widget.id, "Cada widget de arquitectura debe tener id");
+      assert.ok(widget.title, "Cada widget de arquitectura debe tener title");
+      assert.ok(widget.url, "Cada widget de arquitectura debe tener url");
+      assert.ok(widget.tagName, "Cada widget de arquitectura debe tener tagName");
     }
   });
 

@@ -8,7 +8,7 @@ const PUBLIC_DIR = path.join(__dirname, "public");
 const DASHBOARD_HTML = path.join(PUBLIC_DIR, "index.html");
 const DASHBOARD_SCRIPT = path.join(PUBLIC_DIR, "dashboard.js");
 
-const DEFAULT_WIDGETS = [
+const DEFAULT_MODULE_WIDGETS = [
   {
     id: "queue-monitor",
     title: "Queue Monitor",
@@ -79,11 +79,33 @@ async function ensurePublicFiles() {
   }
 }
 
+function isNonEmptyArray(value) {
+  return Array.isArray(value) && value.length > 0;
+}
+
 function createDashboardConfig(widgetsOption) {
-  if (Array.isArray(widgetsOption) && widgetsOption.length > 0) {
-    return { widgets: widgetsOption };
+  let moduleWidgets = DEFAULT_MODULE_WIDGETS;
+  let architectureWidgets = [];
+
+  if (Array.isArray(widgetsOption)) {
+    architectureWidgets = widgetsOption;
+  } else if (widgetsOption && typeof widgetsOption === "object") {
+    if (isNonEmptyArray(widgetsOption.modules)) {
+      moduleWidgets = widgetsOption.modules;
+    }
+    if (Array.isArray(widgetsOption.architecture)) {
+      architectureWidgets = widgetsOption.architecture;
+    } else if (isNonEmptyArray(widgetsOption.widgets)) {
+      // Support legacy "widgets" option by treating it as architecture widgets.
+      architectureWidgets = widgetsOption.widgets;
+    }
   }
-  return { widgets: DEFAULT_WIDGETS };
+
+  return {
+    widgets: moduleWidgets,
+    moduleWidgets,
+    architectureWidgets,
+  };
 }
 
 function sendJson(response, statusCode, payload) {
