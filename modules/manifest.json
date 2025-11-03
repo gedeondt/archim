@@ -11,6 +11,13 @@
     {
       "module": "./modules/dashboard",
       "port": 4300
+    },
+    {
+      "module": "./modules/mysql-simulator",
+      "port": 4500,
+      "options": {
+        "mysqlPort": 3307
+      }
     }
   ]
 }

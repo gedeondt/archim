@@ -1,0 +1,240 @@
+(function () {
+  class MysqlSimulatorDashboard extends HTMLElement {
+    constructor() {
+      super();
+      this.attachShadow({ mode: "open" });
+      this.refreshInterval = null;
+      this.refreshRate = 4000;
+    }
+
+    static get observedAttributes() {
+      return ["metrics-url"];
+    }
+
+    attributeChangedCallback() {
+      this.scheduleRefresh();
+    }
+
+    connectedCallback() {
+      this.renderSkeleton();
+      this.scheduleRefresh();
+    }
+
+    disconnectedCallback() {
+      if (this.refreshInterval) {
+        clearInterval(this.refreshInterval);
+        this.refreshInterval = null;
+      }
+    }
+
+    get metricsUrl() {
+      return this.getAttribute("metrics-url");
+    }
+
+    scheduleRefresh() {
+      if (this.refreshInterval) {
+        clearInterval(this.refreshInterval);
+        this.refreshInterval = null;
+      }
+      this.loadMetrics();
+      if (this.refreshRate > 0) {
+        this.refreshInterval = setInterval(() => this.loadMetrics(), this.refreshRate);
+      }
+    }
+
+    async loadMetrics() {
+      const url = this.metricsUrl;
+      if (!url) {
+        this.renderError("No metrics-url attribute provided");
+        return;
+      }
+      try {
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const payload = await response.json();
+        this.renderMetrics(payload);
+      } catch (error) {
+        this.renderError(`Error loading metrics: ${error.message}`);
+      }
+    }
+
+    renderSkeleton() {
+      if (!this.shadowRoot) {
+        return;
+      }
+      this.shadowRoot.innerHTML = `
+        <style>
+          :host {
+            display: block;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            color: #1f2933;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(15, 23, 42, 0.08);
+            padding: 20px;
+            min-height: 220px;
+          }
+          h2 {
+            margin: 0 0 12px;
+            font-size: 1.25rem;
+            color: #0b7285;
+          }
+          .summary {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+          }
+          .summary-card {
+            flex: 1 1 140px;
+            background: linear-gradient(135deg, #e3f2fd 0%, #f1f5f9 100%);
+            border-radius: 10px;
+            padding: 16px;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+          }
+          .summary-card h3 {
+            margin: 0;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #486581;
+          }
+          .summary-card p {
+            margin: 8px 0 0;
+            font-size: 1.6rem;
+            font-weight: 600;
+            color: #102a43;
+          }
+          .databases {
+            display: grid;
+            gap: 12px;
+          }
+          .database-card {
+            border: 1px solid #d9e2ec;
+            border-radius: 10px;
+            padding: 14px 16px;
+            background: #f8fafc;
+          }
+          .database-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 8px;
+          }
+          .database-name {
+            font-weight: 600;
+            font-size: 1rem;
+          }
+          .table-list {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            display: grid;
+            gap: 6px;
+          }
+          .table-item {
+            display: flex;
+            justify-content: space-between;
+            background: #ffffff;
+            border-radius: 8px;
+            padding: 8px 12px;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+            font-size: 0.9rem;
+          }
+          .table-item span {
+            display: inline-flex;
+            gap: 6px;
+          }
+          .error {
+            color: #c81e1e;
+            background: #fde8e8;
+            border: 1px solid #f8b4b4;
+            border-radius: 8px;
+            padding: 12px;
+          }
+        </style>
+        <h2>MySQL Simulator</h2>
+        <div class="summary" role="list">
+          <div class="summary-card" role="listitem">
+            <h3>Consultas</h3>
+            <p id="query-count">0</p>
+          </div>
+          <div class="summary-card" role="listitem">
+            <h3>Bases de datos</h3>
+            <p id="database-count">0</p>
+          </div>
+        </div>
+        <div id="content"></div>
+      `;
+    }
+
+    renderMetrics(payload) {
+      if (!this.shadowRoot) {
+        return;
+      }
+      const queryCountEl = this.shadowRoot.querySelector("#query-count");
+      const databaseCountEl = this.shadowRoot.querySelector("#database-count");
+      const contentEl = this.shadowRoot.querySelector("#content");
+      if (queryCountEl) {
+        queryCountEl.textContent = String(payload.queryCount ?? 0);
+      }
+      if (databaseCountEl) {
+        databaseCountEl.textContent = String(payload.databaseCount ?? 0);
+      }
+      if (!contentEl) {
+        return;
+      }
+      const databases = Array.isArray(payload.databases) ? payload.databases : [];
+      if (databases.length === 0) {
+        contentEl.innerHTML = "<p>No hay bases de datos registradas.</p>";
+        return;
+      }
+      const databaseCards = databases
+        .map((database) => {
+          const tables = Array.isArray(database.tables) ? database.tables : [];
+          const tableItems = tables
+            .map((table) => `
+              <li class="table-item">
+                <span>
+                  <strong>${table.name}</strong>
+                </span>
+                <span>
+                  <span>${table.columnCount ?? 0} columnas</span>
+                  <span>${table.rowCount ?? 0} registros</span>
+                </span>
+              </li>
+            `)
+            .join("");
+          return `
+            <section class="database-card">
+              <div class="database-header">
+                <span class="database-name">${database.name}</span>
+                <span>${tables.length} tablas</span>
+              </div>
+              <ul class="table-list">
+                ${tableItems || "<li>No hay tablas registradas.</li>"}
+              </ul>
+            </section>
+          `;
+        })
+        .join("");
+      contentEl.innerHTML = `<div class="databases">${databaseCards}</div>`;
+    }
+
+    renderError(message) {
+      if (!this.shadowRoot) {
+        return;
+      }
+      const contentEl = this.shadowRoot.querySelector("#content");
+      if (contentEl) {
+        contentEl.innerHTML = `<div class="error">${message}</div>`;
+      }
+    }
+  }
+
+  if (!customElements.get("mysql-simulator-dashboard")) {
+    customElements.define("mysql-simulator-dashboard", MysqlSimulatorDashboard);
+  }
+})();
