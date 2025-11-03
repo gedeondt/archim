@@ -1,0 +1,163 @@
+class TestEmitterWidget extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: "open" });
+    this.handleClick = this.handleClick.bind(this);
+    this.handleAutoToggle = this.handleAutoToggle.bind(this);
+    this.autoTimer = null;
+  }
+
+  connectedCallback() {
+    this.render();
+  }
+
+  disconnectedCallback() {
+    this.stopAutoEmit();
+  }
+
+  get bffUrl() {
+    return this.getAttribute("bff-url") || "/api/emit";
+  }
+
+  get autoIntervalMs() {
+    const value = Number(this.getAttribute("auto-interval"));
+    return Number.isFinite(value) && value > 0 ? value : 1000;
+  }
+
+  setStatus(message, type = "info") {
+    const status = this.shadowRoot.querySelector("#status");
+    if (status) {
+      status.textContent = message;
+      status.setAttribute("data-type", type);
+    }
+  }
+
+  async emitOnce() {
+    const noteInput = this.shadowRoot.querySelector("#note");
+    const note = noteInput ? noteInput.value : "Manual emit";
+    try {
+      const response = await fetch(this.bffUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note }),
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const payload = await response.json();
+      this.setStatus(`Evento emitido (${payload.message.id})`, "success");
+    } catch (error) {
+      this.setStatus(`Error: ${error.message}`, "error");
+    }
+  }
+
+  handleClick(event) {
+    event.preventDefault();
+    this.emitOnce();
+  }
+
+  handleAutoToggle(event) {
+    if (event.target.checked) {
+      this.startAutoEmit();
+    } else {
+      this.stopAutoEmit();
+    }
+  }
+
+  startAutoEmit() {
+    this.stopAutoEmit();
+    this.autoTimer = setInterval(() => {
+      this.emitOnce();
+    }, this.autoIntervalMs);
+  }
+
+  stopAutoEmit() {
+    if (this.autoTimer) {
+      clearInterval(this.autoTimer);
+      this.autoTimer = null;
+    }
+    const toggle = this.shadowRoot.querySelector("#auto-toggle");
+    if (toggle) {
+      toggle.checked = false;
+    }
+  }
+
+  render() {
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host {
+          display: block;
+          font-family: system-ui, sans-serif;
+          border: 1px solid #ccc;
+          border-radius: 8px;
+          padding: 16px;
+          background: #fafafa;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        h2 {
+          margin: 0 0 12px;
+          font-size: 18px;
+        }
+        .actions {
+          display: flex;
+          gap: 8px;
+          align-items: center;
+          margin-bottom: 12px;
+        }
+        button {
+          padding: 8px 16px;
+          font-size: 14px;
+          border: none;
+          border-radius: 4px;
+          background: #4a67ff;
+          color: #fff;
+          cursor: pointer;
+        }
+        button:hover {
+          background: #384dcc;
+        }
+        label {
+          font-size: 12px;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+        textarea {
+          width: 100%;
+          min-height: 60px;
+          resize: vertical;
+          padding: 6px;
+          font-family: monospace;
+          border-radius: 4px;
+          border: 1px solid #ccc;
+        }
+        #status {
+          font-size: 12px;
+          color: #555;
+        }
+        #status[data-type="success"] {
+          color: #187a1e;
+        }
+        #status[data-type="error"] {
+          color: #b00020;
+        }
+      </style>
+      <h2>Test Emitter</h2>
+      <div class="actions">
+        <button id="emit">Emit</button>
+        <label>
+          <input type="checkbox" id="auto-toggle" /> Auto emit (${this.autoIntervalMs}ms)
+        </label>
+      </div>
+      <textarea id="note" placeholder="Payload note">Demo payload</textarea>
+      <div id="status">Esperando eventos...</div>
+    `;
+
+    this.shadowRoot.querySelector("#emit").addEventListener("click", this.handleClick);
+    this.shadowRoot
+      .querySelector("#auto-toggle")
+      .addEventListener("change", this.handleAutoToggle);
+  }
+}
+
+customElements.define("test-emitter", TestEmitterWidget);

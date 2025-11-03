@@ -18,8 +18,14 @@ mantenga la misma filosofía y resulte sencillo de mantener.
 | Instalar dependencias       | `npm install` en la raíz del repositorio                                 |
 | Lanzar todos los módulos    | `node launcher.js`                                                        |
 | Lanzar módulos concretos    | `node launcher.js --piece ./modules/<nombre>` (múltiple bandera permitida) |
+| Lanzar arquitectura completa | `node launcher.js --architecture <nombre>`                             |
 | Ejecutar pruebas            | `node tester.js --piece ./modules/<nombre>@<puerto>`                     |
 | Manifest por defecto        | `./modules/manifest.json`                                                |
+
+## Arquitecturas compuestas
+
+Consulta [architectures.md](./architectures.md) para conocer la convención oficial al crear
+escenarios completos (CRM, ERP, etc.) a partir de los simuladores disponibles en `./modules`.
 
 ## Logs y estado
 
@@ -68,6 +74,7 @@ modules/
 ## Manifests y configuración
 
 - `launcher.js` lee `./modules/manifest.json` cuando no se pasan flags y levanta cada pieza en el puerto
+- `node launcher.js --architecture <nombre>` carga `./architectures/<nombre>/manifest.json` y ejecuta sus fases en orden.
   indicado. Cada entrada del manifest debe incluir `{ "module": "./modules/<nombre>", "port": 4200 }` y,
   opcionalmente, `"options"` para parámetros adicionales de `start()`.
 - Para escenarios personalizados, crea un JSON con la misma estructura y ejecútalo con
