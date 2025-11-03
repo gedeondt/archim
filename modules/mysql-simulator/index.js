@@ -495,7 +495,8 @@ async function handleQuery(sequenceId, connection, sql) {
     if (
       upper.startsWith("CREATE") ||
       upper.startsWith("INSERT") ||
-      upper.startsWith("UPDATE")
+      upper.startsWith("UPDATE") ||
+      upper.startsWith("DELETE")
     ) {
       const { affectedRows } = await runNonSelectQuery(targetDatabase, trimmed);
       return [buildOkPacket(sequenceId, { affectedRows })];

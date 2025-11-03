@@ -5,6 +5,7 @@
   "description": "Archim modular services",
   "license": "MIT",
   "dependencies": {
-    "better-sqlite3": "^9.4.0"
+    "better-sqlite3": "^9.4.0",
+    "mysql2": "^3.9.7"
   }
 }
