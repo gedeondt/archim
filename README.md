@@ -87,6 +87,46 @@ modules/
 - El módulo `dashboard` agrega todos los micro frontends. Si añades uno nuevo, actualiza su configuración
   (ya sea el manifest o las opciones del dashboard) para que aparezca.
 
+### Ejemplo: añadir widgets personalizados al dashboard
+
+Puedes pasar una lista de widgets al dashboard a través del manifest (o de `start({ widgets })` si lo
+levantas manualmente). Cada widget declara el `url` del micro frontend y las `props` necesarias para
+parametrizarlo:
+
+```json
+{
+  "module": "./modules/dashboard",
+  "port": 4300,
+  "options": {
+    "widgets": [
+      {
+        "id": "queue-monitor",
+        "title": "Queue Monitor",
+        "url": "http://localhost:4200/microfrontends/queue-monitor.js",
+        "tagName": "queue-monitor",
+        "props": {
+          "metrics-url": "http://localhost:4200/metrics",
+          "queues-url": "http://localhost:4200/queues"
+        }
+      },
+      {
+        "id": "new-service-monitor",
+        "title": "New Service Monitor",
+        "url": "http://localhost:5200/microfrontends/new-service.js",
+        "tagName": "new-service-monitor",
+        "props": {
+          "metrics-url": "http://localhost:5200/metrics"
+        }
+      }
+    ]
+  }
+}
+```
+
+Este patrón se mantiene igual cuando añades un segundo módulo: registra su micro frontend en su propio
+puerto y referencia esas URLs en la configuración del dashboard, evitando hardcodear puertos dentro del
+código.
+
 ## Eventos y APIs
 
 - Documenta cada endpoint HTTP (ruta, método, parámetros, respuestas, códigos de error) directamente en
