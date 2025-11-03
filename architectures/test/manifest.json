@@ -1,0 +1,181 @@
+{
+  "phases": [
+    {
+      "phase": "boot-infra",
+      "pieces": [
+        { "module": "./modules/queue", "port": 4200 },
+        { "module": "./modules/event-log", "port": 4400 },
+        {
+          "module": "./modules/dashboard",
+          "port": 4300,
+          "options": {
+            "widgets": [
+              {
+                "id": "test-emitter",
+                "title": "Test Emitter",
+                "url": "http://localhost:5700/microfront/emit-button.js",
+                "tagName": "test-emitter",
+                "props": {
+                  "bff-url": "http://localhost:5700/api/emit",
+                  "auto-interval": "1500"
+                }
+              },
+              {
+                "id": "queue-monitor",
+                "title": "Queue Monitor",
+                "url": "http://localhost:4200/microfrontends/queue-monitor.js",
+                "tagName": "queue-monitor",
+                "props": {
+                  "metrics-url": "http://localhost:4200/metrics",
+                  "queues-url": "http://localhost:4200/queues"
+                }
+              },
+              {
+                "id": "event-log-monitor",
+                "title": "Event Log",
+                "url": "http://localhost:4400/microfrontends/event-log-monitor.js",
+                "tagName": "event-log-monitor",
+                "props": {
+                  "metrics-url": "http://localhost:4400/metrics"
+                }
+              },
+              {
+                "id": "mysql-simulator",
+                "title": "MySQL Simulator",
+                "url": "http://localhost:4500/microfrontends/mysql-simulator.js",
+                "tagName": "mysql-simulator-dashboard",
+                "props": {
+                  "metrics-url": "http://localhost:4500/metrics"
+                }
+              },
+              {
+                "id": "dynamodb-simulator",
+                "title": "DynamoDB Simulator",
+                "url": "http://localhost:4600/microfrontends/dynamodb-simulator.js",
+                "tagName": "dynamodb-simulator-dashboard",
+                "props": {
+                  "metrics-url": "http://localhost:4600/metrics"
+                }
+              },
+              {
+                "id": "redis-simulator",
+                "title": "Redis Simulator",
+                "url": "http://localhost:4700/microfrontends/redis-simulator.js",
+                "tagName": "redis-simulator-dashboard",
+                "props": {
+                  "metrics-url": "http://localhost:4700/metrics"
+                }
+              },
+              {
+                "id": "s3-simulator",
+                "title": "S3 Simulator",
+                "url": "http://localhost:4800/widget",
+                "tagName": "s3-simulator-widget",
+                "props": {
+                  "metrics-url": "http://localhost:4800/metrics"
+                }
+              }
+            ]
+          }
+        },
+        { "module": "./modules/mysql-simulator", "port": 4500, "options": { "mysqlPort": 3307 } },
+        { "module": "./modules/dynamodb-simulator", "port": 4600 },
+        { "module": "./modules/redis-simulator", "port": 4700 },
+        { "module": "./modules/s3-simulator", "port": 4800 }
+      ]
+    },
+    {
+      "phase": "initialize",
+      "pieces": [
+        {
+          "module": "./architectures/test/init/initialize.js",
+          "options": {
+            "mysql": {
+              "schema": "./architectures/test/init/mysql/metrics-schema.sql",
+              "host": "localhost",
+              "port": 3307,
+              "user": "root",
+              "password": ""
+            },
+            "dynamodb": {
+              "endpoint": "http://localhost:4600",
+              "collections": ["test-messages"]
+            },
+            "queue": {
+              "endpoint": "http://localhost:4200",
+              "names": ["test"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "phase": "start-middleware",
+      "pieces": [
+        {
+          "module": "./architectures/test/infra/middleware/queue-to-store.js",
+          "options": {
+            "queueUrl": "http://localhost:4200/queues/test",
+            "pollIntervalMs": 1000,
+            "eventLog": {
+              "endpoint": "http://localhost:4400",
+              "queueName": "test"
+            },
+            "dynamodb": {
+              "endpoint": "http://localhost:4600",
+              "collection": "test-messages"
+            }
+          }
+        },
+        {
+          "module": "./architectures/test/infra/middleware/dynamodb-to-mysql.js",
+          "options": {
+            "pollIntervalMs": 4000,
+            "dynamodb": {
+              "endpoint": "http://localhost:4600",
+              "collection": "test-messages",
+              "pageSize": 100
+            },
+            "mysql": {
+              "host": "localhost",
+              "port": 3307,
+              "user": "root",
+              "password": ""
+            }
+          }
+        },
+        {
+          "module": "./architectures/test/infra/middleware/logs-to-redis-s3.js",
+          "options": {
+            "pollIntervalMs": 6000,
+            "eventLog": {
+              "endpoint": "http://localhost:4400",
+              "queueName": "test"
+            },
+            "redis": {
+              "endpoint": "http://localhost:4700",
+              "key": "test:lastProcessed"
+            },
+            "s3": {
+              "endpoint": "http://localhost:4800",
+              "prefix": "test-logs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "phase": "start-services",
+      "pieces": [
+        {
+          "module": "./architectures/test/services/emitter/bff/index.js",
+          "port": 5700,
+          "options": {
+            "queueUrl": "http://localhost:4200/queues/test/messages",
+            "microfrontPath": "./architectures/test/services/emitter/microfront/EmitButton.microfrontend"
+          }
+        }
+      ]
+    }
+  ]
+}

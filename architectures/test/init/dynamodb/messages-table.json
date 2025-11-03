@@ -1,0 +1,12 @@
+{
+  "name": "test-messages",
+  "description": "Mensajes recibidos desde el microfront de prueba",
+  "primaryKey": "id",
+  "fields": [
+    "id",
+    "source",
+    "emittedAt",
+    "receivedAt",
+    "payload"
+  ]
+}
