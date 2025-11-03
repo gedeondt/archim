@@ -1,0 +1,187 @@
+(function () {
+  "use strict";
+
+  class EventLogMonitor extends HTMLElement {
+    constructor() {
+      super();
+      this._shadow = this.attachShadow({ mode: "open" });
+      this._data = { totalEvents: 0, queues: [] };
+      this._timer = null;
+      this._lastError = null;
+    }
+
+    static get observedAttributes() {
+      return ["metrics-url", "refresh-interval"];
+    }
+
+    connectedCallback() {
+      this._render();
+      this._setupPolling();
+    }
+
+    disconnectedCallback() {
+      this._clearPolling();
+    }
+
+    attributeChangedCallback(name, oldValue, newValue) {
+      if (oldValue === newValue) {
+        return;
+      }
+      if (name === "metrics-url") {
+        this._fetchMetrics();
+      }
+      if (name === "refresh-interval") {
+        this._setupPolling();
+      }
+    }
+
+    get metricsUrl() {
+      return this.getAttribute("metrics-url");
+    }
+
+    get refreshInterval() {
+      const value = Number.parseInt(this.getAttribute("refresh-interval") || "", 10);
+      if (Number.isFinite(value) && value > 0) {
+        return value;
+      }
+      return 5000;
+    }
+
+    _setupPolling() {
+      this._clearPolling();
+      if (!this.metricsUrl) {
+        this._lastError = "Atributo metrics-url obligatorio";
+        this._render();
+        return;
+      }
+      this._fetchMetrics();
+      this._timer = setInterval(() => this._fetchMetrics(), this.refreshInterval);
+    }
+
+    _clearPolling() {
+      if (this._timer) {
+        clearInterval(this._timer);
+        this._timer = null;
+      }
+    }
+
+    async _fetchMetrics() {
+      const url = this.metricsUrl;
+      if (!url) {
+        return;
+      }
+      try {
+        this._lastError = null;
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        this._data = {
+          totalEvents: typeof data.totalEvents === "number" ? data.totalEvents : 0,
+          queues: Array.isArray(data.queues) ? data.queues : [],
+        };
+        this._render();
+      } catch (error) {
+        this._lastError = `No se pudieron obtener métricas (${error.message})`;
+        this._render();
+      }
+    }
+
+    _render() {
+      const { totalEvents, queues } = this._data;
+      const errorMessage = this._lastError;
+      const rows = queues
+        .map((queue) => {
+          const queueName = queue && queue.name ? queue.name : "(desconocida)";
+          const queueTotal = queue && typeof queue.totalEvents === "number" ? queue.totalEvents : 0;
+          const lastEvent = queue && queue.lastEventAt ? queue.lastEventAt : "-";
+          return `
+            <tr>
+              <td>${queueName}</td>
+              <td>${queueTotal}</td>
+              <td>${lastEvent}</td>
+            </tr>
+          `;
+        })
+        .join("");
+
+      this._shadow.innerHTML = `
+        <style>
+          :host {
+            display: block;
+            font-family: "Inter", "Segoe UI", sans-serif;
+            border: 1px solid #d0d7de;
+            border-radius: 8px;
+            padding: 16px;
+            background: #ffffff;
+            box-shadow: 0 2px 4px rgba(15, 23, 42, 0.08);
+          }
+          header {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            margin-bottom: 12px;
+          }
+          h2 {
+            margin: 0;
+            font-size: 1.2rem;
+            color: #0f172a;
+          }
+          .total {
+            font-size: 0.9rem;
+            color: #475569;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+          th, td {
+            text-align: left;
+            padding: 8px;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 0.9rem;
+          }
+          th {
+            background: #f8fafc;
+            color: #1e293b;
+            font-weight: 600;
+          }
+          tbody tr:hover {
+            background: #f1f5f9;
+          }
+          .error {
+            color: #b91c1c;
+            font-size: 0.9rem;
+            margin-top: 8px;
+          }
+        </style>
+        <header>
+          <h2>Event Log</h2>
+          <div class="total">Eventos totales: <strong>${totalEvents}</strong></div>
+        </header>
+        <table>
+          <thead>
+            <tr>
+              <th>Cola</th>
+              <th>Total de eventos</th>
+              <th>Último evento</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows || `
+              <tr>
+                <td colspan="3">Sin eventos registrados todavía.</td>
+              </tr>
+            `}
+          </tbody>
+        </table>
+        ${errorMessage ? `<div class="error">${errorMessage}</div>` : ""}
+      `;
+    }
+  }
+
+  if (!customElements.get("event-log-monitor")) {
+    customElements.define("event-log-monitor", EventLogMonitor);
+  }
+})();
