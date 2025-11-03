@@ -2,79 +2,35 @@ class QueueMonitor extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
+    const bootstrapCdn =
+      'https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css';
     this.shadowRoot.innerHTML = `
+<link rel="stylesheet" href="${bootstrapCdn}">
 <style>
   :host {
     display: block;
-    font-family: system-ui, sans-serif;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    padding: 1rem;
-    background: #fff;
-    max-width: 480px;
-  }
-  h2 {
-    margin-top: 0;
-    font-size: 1.1rem;
-  }
-  h3 {
-    margin: 1rem 0 0.5rem;
-    font-size: 1rem;
-  }
-  .count {
-    font-size: 2.5rem;
-    font-weight: bold;
-  }
-  .queues {
-    margin-top: 1rem;
-  }
-  .queue {
-    border-top: 1px solid #e3e3e3;
-    padding: 0.5rem 0;
-  }
-  .queue:first-of-type {
-    border-top: none;
-  }
-  .queue__header {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.5rem;
-    font-weight: 600;
-  }
-  .queue__messages {
-    margin: 0.25rem 0 0;
-    padding-left: 1rem;
-    font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-    font-size: 0.85rem;
-    color: #333;
-  }
-  .queue__empty {
-    margin-top: 0.25rem;
-    color: #777;
-    font-size: 0.85rem;
-  }
-  .queue__badge {
-    background: #eef3ff;
-    color: #274a8d;
-    border-radius: 999px;
-    padding: 0.1rem 0.5rem;
-    font-size: 0.75rem;
-  }
-  button {
-    margin-top: 1rem;
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 4px;
-    background: #0059b2;
-    color: white;
-    cursor: pointer;
   }
 </style>
-<h2>Queue Monitor</h2>
-<div class="count" id="count">0</div>
-<h3>Colas registradas</h3>
-<div class="queues" id="queues">Sin colas registradas</div>
-<button id="refresh">Actualizar</button>`;
+<div class="card shadow-sm">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+      <div>
+        <h2 class="h5 mb-1">Queue Monitor</h2>
+        <p class="text-muted mb-0">Mensajes procesados</p>
+      </div>
+      <div id="count" class="display-6 fs-2 fw-semibold text-primary">0</div>
+    </div>
+    <div class="mt-4">
+      <div class="d-flex align-items-center justify-content-between gap-3 mb-2">
+        <h3 class="h6 mb-0">Colas registradas</h3>
+        <button id="refresh" type="button" class="btn btn-sm btn-primary">Actualizar</button>
+      </div>
+      <div class="list-group small" id="queues">
+        <div class="text-muted">Sin colas registradas</div>
+      </div>
+    </div>
+  </div>
+</div>`;
     this._onRefresh = this._onRefresh.bind(this);
   }
 
@@ -140,26 +96,26 @@ class QueueMonitor extends HTMLElement {
     }
     container.innerHTML = '';
     if (error) {
-      container.textContent = 'Error al cargar colas';
+      container.innerHTML = '<div class="alert alert-danger mb-0">Error al cargar colas</div>';
       return;
     }
     if (!queues || queues.length === 0) {
-      container.textContent = 'Sin colas registradas';
+      container.innerHTML = '<div class="text-muted">Sin colas registradas</div>';
       return;
     }
     queues.forEach((queue) => {
       const wrapper = document.createElement('div');
-      wrapper.classList.add('queue');
+      wrapper.className = 'list-group-item list-group-item-action flex-column gap-2';
 
       const header = document.createElement('div');
-      header.classList.add('queue__header');
+      header.className = 'd-flex justify-content-between align-items-center gap-2';
 
       const name = document.createElement('span');
-      name.classList.add('queue__name');
+      name.className = 'fw-semibold';
       name.textContent = queue.name || '(sin nombre)';
 
       const badge = document.createElement('span');
-      badge.classList.add('queue__badge');
+      badge.className = 'badge text-bg-primary';
       const total = typeof queue.totalMessages === 'number' ? queue.totalMessages : Array.isArray(queue.messages) ? queue.messages.length : 0;
       badge.textContent = String(total) + ' mensajes';
 
@@ -169,9 +125,6 @@ class QueueMonitor extends HTMLElement {
 
       if (Array.isArray(queue.messages) && queue.messages.length > 0) {
         const latestEntry = queue.messages[queue.messages.length - 1];
-        const list = document.createElement('ul');
-        list.classList.add('queue__messages');
-        const item = document.createElement('li');
         const receivedAt = latestEntry.receivedAt
           ? new Date(latestEntry.receivedAt).toLocaleString()
           : 'Sin fecha';
@@ -179,12 +132,19 @@ class QueueMonitor extends HTMLElement {
           typeof latestEntry.message === 'object'
             ? JSON.stringify(latestEntry.message)
             : String(latestEntry.message);
-        item.textContent = '[' + receivedAt + '] ' + payload;
-        list.appendChild(item);
-        wrapper.appendChild(list);
+        const message = document.createElement('div');
+        message.className = 'mt-2 text-muted';
+        const label = document.createElement('span');
+        label.className = 'd-block small';
+        label.textContent = `Último mensaje (${receivedAt})`;
+        const codeBlock = document.createElement('code');
+        codeBlock.className = 'small text-wrap d-block';
+        codeBlock.textContent = payload;
+        message.append(label, codeBlock);
+        wrapper.appendChild(message);
       } else {
         const empty = document.createElement('div');
-        empty.classList.add('queue__empty');
+        empty.className = 'mt-2 text-muted fst-italic';
         empty.textContent = 'Sin mensajes registrados';
         wrapper.appendChild(empty);
       }

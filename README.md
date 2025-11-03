@@ -87,6 +87,16 @@ modules/
 - El módulo `dashboard` agrega todos los micro frontends. Si añades uno nuevo, actualiza su configuración
   (ya sea el manifest o las opciones del dashboard) para que aparezca.
 
+### Estilos compartidos para micro frontends
+
+- Cada micro frontend debe enlazar explícitamente la hoja de estilos de Bootstrap 5.3 dentro de su
+  propio shadow DOM utilizando el CDN `https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css`.
+  El navegador reutiliza el recurso en caché y evitamos duplicar bloques `&lt;style&gt;` extensos.
+- Aprovecha las utilidades de Bootstrap (tarjetas, filas, badges, tablas responsivas, etc.) para estructurar
+  el contenido. Mantén el CSS adicional al mínimo y resérvalo para ajustes específicos del componente.
+- Conserva los atributos y elementos de contenido existentes al migrar estilos para que las props y tests
+  continúen funcionando sin cambios.
+
 ### Ejemplo: añadir widgets personalizados al dashboard
 
 Puedes pasar una lista de widgets al dashboard a través del manifest (o de `start({ widgets })` si lo

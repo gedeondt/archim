@@ -2,74 +2,48 @@ class RedisSimulatorDashboard extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
+    const bootstrapCdn =
+      'https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css';
     this.shadowRoot.innerHTML = `
+<link rel="stylesheet" href="${bootstrapCdn}">
 <style>
   :host {
     display: block;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: #ffffff;
-    border: 1px solid #d3d3d3;
-    border-radius: 10px;
-    padding: 1rem 1.25rem;
-    min-width: 260px;
-    max-width: 420px;
-    color: #1f2933;
-  }
-  h2 {
-    margin: 0 0 0.75rem;
-    font-size: 1.15rem;
-  }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.75rem;
-  }
-  .metric {
-    padding: 0.75rem;
-    border-radius: 8px;
-    background: linear-gradient(135deg, #f4f6fb 0%, #eef2ff 100%);
-    box-shadow: inset 0 0 0 1px rgba(39, 74, 141, 0.08);
-  }
-  .metric__label {
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 0.25rem;
-    color: #52606d;
-  }
-  .metric__value {
-    font-size: 1.75rem;
-    font-weight: 700;
-  }
-  button {
-    margin-top: 1rem;
-    width: 100%;
-    padding: 0.6rem 1rem;
-    border-radius: 6px;
-    border: none;
-    background: #0059b2;
-    color: #ffffff;
-    font-weight: 600;
-    cursor: pointer;
-  }
-  button:hover {
-    background: #00408a;
-  }
-  .status {
-    margin-top: 0.75rem;
-    font-size: 0.8rem;
-    color: #52606d;
   }
 </style>
-<h2>Redis Simulator</h2>
-<div class="grid">
-  <div class="metric"><div class="metric__label">Claves totales</div><div class="metric__value" id="total">0</div></div>
-  <div class="metric"><div class="metric__label">Listas</div><div class="metric__value" id="lists">0</div></div>
-  <div class="metric"><div class="metric__label">Sets</div><div class="metric__value" id="sets">0</div></div>
-  <div class="metric"><div class="metric__label">Por caducar</div><div class="metric__value" id="expiring">0</div></div>
-</div>
-<button id="refresh">Actualizar métricas</button>
-<div class="status" id="status">Actualizado automáticamente cada 5s</div>`;
+<div class="card shadow-sm">
+  <div class="card-body">
+    <h2 class="h5">Redis Simulator</h2>
+    <div class="row row-cols-2 g-3 mt-2">
+      <div class="col">
+        <div class="bg-light border rounded-3 p-3 text-center h-100">
+          <div class="text-uppercase text-muted small fw-semibold">Claves totales</div>
+          <div class="display-6 fs-2 fw-semibold" id="total">0</div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="bg-light border rounded-3 p-3 text-center h-100">
+          <div class="text-uppercase text-muted small fw-semibold">Listas</div>
+          <div class="display-6 fs-2 fw-semibold" id="lists">0</div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="bg-light border rounded-3 p-3 text-center h-100">
+          <div class="text-uppercase text-muted small fw-semibold">Sets</div>
+          <div class="display-6 fs-2 fw-semibold" id="sets">0</div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="bg-light border rounded-3 p-3 text-center h-100">
+          <div class="text-uppercase text-muted small fw-semibold">Por caducar</div>
+          <div class="display-6 fs-2 fw-semibold" id="expiring">0</div>
+        </div>
+      </div>
+    </div>
+    <button id="refresh" type="button" class="btn btn-primary w-100 mt-4">Actualizar métricas</button>
+    <div class="text-muted small mt-3" id="status">Actualizado automáticamente cada 5s</div>
+  </div>
+</div>`;
     this._onRefresh = this._onRefresh.bind(this);
     this._poll = null;
   }
