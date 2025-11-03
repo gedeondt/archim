@@ -9,7 +9,7 @@
           "module": "./modules/dashboard",
           "port": 4300,
           "options": {
-            "widgets": [
+            "architecture": [
               {
                 "id": "test-emitter",
                 "title": "Test Emitter",
@@ -18,61 +18,6 @@
                 "props": {
                   "bff-url": "http://localhost:5700/api/emit",
                   "auto-interval": "1500"
-                }
-              },
-              {
-                "id": "queue-monitor",
-                "title": "Queue Monitor",
-                "url": "http://localhost:4200/microfrontends/queue-monitor.js",
-                "tagName": "queue-monitor",
-                "props": {
-                  "metrics-url": "http://localhost:4200/metrics",
-                  "queues-url": "http://localhost:4200/queues"
-                }
-              },
-              {
-                "id": "event-log-monitor",
-                "title": "Event Log",
-                "url": "http://localhost:4400/microfrontends/event-log-monitor.js",
-                "tagName": "event-log-monitor",
-                "props": {
-                  "metrics-url": "http://localhost:4400/metrics"
-                }
-              },
-              {
-                "id": "mysql-simulator",
-                "title": "MySQL Simulator",
-                "url": "http://localhost:4500/microfrontends/mysql-simulator.js",
-                "tagName": "mysql-simulator-dashboard",
-                "props": {
-                  "metrics-url": "http://localhost:4500/metrics"
-                }
-              },
-              {
-                "id": "dynamodb-simulator",
-                "title": "DynamoDB Simulator",
-                "url": "http://localhost:4600/microfrontends/dynamodb-simulator.js",
-                "tagName": "dynamodb-simulator-dashboard",
-                "props": {
-                  "metrics-url": "http://localhost:4600/metrics"
-                }
-              },
-              {
-                "id": "redis-simulator",
-                "title": "Redis Simulator",
-                "url": "http://localhost:4700/microfrontends/redis-simulator.js",
-                "tagName": "redis-simulator-dashboard",
-                "props": {
-                  "metrics-url": "http://localhost:4700/metrics"
-                }
-              },
-              {
-                "id": "s3-simulator",
-                "title": "S3 Simulator",
-                "url": "http://localhost:4800/widget",
-                "tagName": "s3-simulator-widget",
-                "props": {
-                  "metrics-url": "http://localhost:4800/metrics"
                 }
               }
             ]
