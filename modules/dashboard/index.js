@@ -55,6 +55,15 @@ const DEFAULT_WIDGETS = [
       "metrics-url": "http://localhost:4700/metrics",
     },
   },
+  {
+    id: "s3-simulator",
+    title: "S3 Simulator",
+    url: "http://localhost:4800/widget",
+    tagName: "s3-simulator-widget",
+    props: {
+      "metrics-url": "http://localhost:4800/metrics",
+    },
+  },
 ];
 
 function loadFile(filePath) {
