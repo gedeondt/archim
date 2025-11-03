@@ -168,15 +168,19 @@ class QueueMonitor extends HTMLElement {
       wrapper.appendChild(header);
 
       if (Array.isArray(queue.messages) && queue.messages.length > 0) {
+        const latestEntry = queue.messages[queue.messages.length - 1];
         const list = document.createElement('ul');
         list.classList.add('queue__messages');
-        queue.messages.forEach((entry) => {
-          const item = document.createElement('li');
-          const receivedAt = entry.receivedAt ? new Date(entry.receivedAt).toLocaleString() : 'Sin fecha';
-          const payload = typeof entry.message === 'object' ? JSON.stringify(entry.message) : String(entry.message);
-          item.textContent = '[' + receivedAt + '] ' + payload;
-          list.appendChild(item);
-        });
+        const item = document.createElement('li');
+        const receivedAt = latestEntry.receivedAt
+          ? new Date(latestEntry.receivedAt).toLocaleString()
+          : 'Sin fecha';
+        const payload =
+          typeof latestEntry.message === 'object'
+            ? JSON.stringify(latestEntry.message)
+            : String(latestEntry.message);
+        item.textContent = '[' + receivedAt + '] ' + payload;
+        list.appendChild(item);
         wrapper.appendChild(list);
       } else {
         const empty = document.createElement('div');
