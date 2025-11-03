@@ -1,10 +1,8 @@
-"use strict";
-
-module.exports = String.raw`class QueueMonitor extends HTMLElement {
+class QueueMonitor extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
-    this.shadowRoot.innerHTML = \`
+    this.shadowRoot.innerHTML = `
 <style>
   :host {
     display: block;
@@ -76,7 +74,7 @@ module.exports = String.raw`class QueueMonitor extends HTMLElement {
 <div class="count" id="count">0</div>
 <h3>Colas registradas</h3>
 <div class="queues" id="queues">Sin colas registradas</div>
-<button id="refresh">Actualizar</button>\`;
+<button id="refresh">Actualizar</button>`;
     this._onRefresh = this._onRefresh.bind(this);
   }
 
@@ -192,4 +190,4 @@ module.exports = String.raw`class QueueMonitor extends HTMLElement {
   }
 }
 
-customElements.define('queue-monitor', QueueMonitor);`;
+customElements.define('queue-monitor', QueueMonitor);
