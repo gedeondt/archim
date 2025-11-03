@@ -19,6 +19,15 @@ const DEFAULT_WIDGETS = [
       "metrics-url": "http://localhost:4500/metrics",
     },
   },
+  {
+    id: "dynamodb-simulator",
+    title: "DynamoDB Simulator",
+    url: "http://localhost:4600/microfrontends/dynamodb-simulator.js",
+    tagName: "dynamodb-simulator-dashboard",
+    props: {
+      "metrics-url": "http://localhost:4600/metrics",
+    },
+  },
 ];
 
 function loadMicrofrontendScript(url) {

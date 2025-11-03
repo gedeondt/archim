@@ -1,0 +1,222 @@
+(function registerDynamoSimulatorDashboard() {
+  if (customElements.get("dynamodb-simulator-dashboard")) {
+    return;
+  }
+
+  const template = document.createElement("template");
+  template.innerHTML = `
+    <style>
+      :host {
+        display: block;
+        font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+        color: #1f2933;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 1rem;
+      }
+
+      .card {
+        border-radius: 0.75rem;
+        border: 1px solid #e5e7eb;
+        background: #ffffff;
+        padding: 1rem;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+      }
+
+      .card h3 {
+        margin: 0;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #6b7280;
+      }
+
+      .card strong {
+        font-size: 1.75rem;
+        font-weight: 700;
+        display: block;
+        margin-top: 0.25rem;
+      }
+
+      ul.collections {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+      }
+
+      ul.collections li {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.35rem 0.5rem;
+        border-radius: 0.5rem;
+        background-color: #f3f4f6;
+      }
+
+      .timestamp {
+        display: block;
+        margin-top: 1rem;
+        font-size: 0.75rem;
+        color: #9ca3af;
+      }
+
+      button.refresh {
+        margin-top: 1rem;
+        padding: 0.5rem 0.75rem;
+        border-radius: 0.5rem;
+        border: none;
+        background-color: #2563eb;
+        color: #ffffff;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      button.refresh:hover {
+        background-color: #1d4ed8;
+      }
+
+      .error {
+        color: #b91c1c;
+        background: #fee2e2;
+        border-radius: 0.5rem;
+        padding: 0.75rem;
+        margin-top: 0.5rem;
+      }
+    </style>
+    <div class="stats">
+      <div class="card">
+        <h3>Colecciones</h3>
+        <strong data-field="collections">0</strong>
+      </div>
+      <div class="card">
+        <h3>Documentos totales</h3>
+        <strong data-field="documents">0</strong>
+      </div>
+    </div>
+    <section class="card" style="margin-top:1rem;">
+      <h3>Documentos por colección</h3>
+      <ul class="collections" data-field="collections-list"></ul>
+      <p class="empty" hidden>No hay colecciones todavía.</p>
+    </section>
+    <span class="timestamp" data-field="timestamp"></span>
+    <button class="refresh" type="button">Actualizar métricas</button>
+    <div class="error" hidden data-field="error"></div>
+  `;
+
+  class DynamoSimulatorDashboard extends HTMLElement {
+    static get observedAttributes() {
+      return ["metrics-url", "refresh-interval"];
+    }
+
+    constructor() {
+      super();
+      this.attachShadow({ mode: "open" });
+      this.shadowRoot.appendChild(template.content.cloneNode(true));
+      this.metricsUrl = this.getAttribute("metrics-url") || "http://localhost:4600/metrics";
+      this.refreshInterval = parseInt(this.getAttribute("refresh-interval"), 10) || 0;
+      this.intervalId = null;
+      this.boundRefresh = this.refresh.bind(this);
+    }
+
+    connectedCallback() {
+      this.shadowRoot
+        .querySelector("button.refresh")
+        .addEventListener("click", this.boundRefresh);
+      this.refresh();
+      this.setupInterval();
+    }
+
+    disconnectedCallback() {
+      this.shadowRoot
+        .querySelector("button.refresh")
+        .removeEventListener("click", this.boundRefresh);
+      this.teardownInterval();
+    }
+
+    attributeChangedCallback(name, _oldValue, newValue) {
+      if (name === "metrics-url") {
+        this.metricsUrl = newValue || "http://localhost:4600/metrics";
+        this.refresh();
+      }
+      if (name === "refresh-interval") {
+        this.refreshInterval = parseInt(newValue, 10) || 0;
+        this.setupInterval();
+      }
+    }
+
+    setupInterval() {
+      this.teardownInterval();
+      if (this.refreshInterval > 0) {
+        this.intervalId = window.setInterval(() => this.refresh(), this.refreshInterval);
+      }
+    }
+
+    teardownInterval() {
+      if (this.intervalId !== null) {
+        window.clearInterval(this.intervalId);
+        this.intervalId = null;
+      }
+    }
+
+    async refresh() {
+      const errorBox = this.shadowRoot.querySelector('[data-field="error"]');
+      try {
+        errorBox.hidden = true;
+        const response = await fetch(this.metricsUrl);
+        if (!response.ok) {
+          throw new Error(`Solicitud fallida: ${response.status}`);
+        }
+        const data = await response.json();
+        this.renderMetrics(data);
+      } catch (error) {
+        errorBox.textContent = error.message;
+        errorBox.hidden = false;
+      }
+    }
+
+    renderMetrics(metrics) {
+      const collectionsField = this.shadowRoot.querySelector('[data-field="collections"]');
+      const documentsField = this.shadowRoot.querySelector('[data-field="documents"]');
+      const timestampField = this.shadowRoot.querySelector('[data-field="timestamp"]');
+      const list = this.shadowRoot.querySelector('[data-field="collections-list"]');
+      const empty = this.shadowRoot.querySelector('.empty');
+
+      const collectionCount = Number(metrics.collectionCount || 0);
+      const totalDocuments = Number(metrics.totalDocuments || 0);
+      const perCollection = metrics.perCollection || {};
+
+      collectionsField.textContent = collectionCount.toLocaleString("es-ES");
+      documentsField.textContent = totalDocuments.toLocaleString("es-ES");
+
+      list.innerHTML = "";
+      const collectionNames = Object.keys(perCollection);
+      if (collectionNames.length === 0) {
+        empty.hidden = false;
+      } else {
+        empty.hidden = true;
+        collectionNames
+          .sort((a, b) => a.localeCompare(b))
+          .forEach((name) => {
+            const item = document.createElement("li");
+            const label = document.createElement("span");
+            label.textContent = name;
+            const value = document.createElement("strong");
+            value.textContent = Number(perCollection[name] || 0).toLocaleString("es-ES");
+            item.append(label, value);
+            list.appendChild(item);
+          });
+      }
+
+      timestampField.textContent = metrics.generatedAt
+        ? `Última actualización: ${new Date(metrics.generatedAt).toLocaleString("es-ES")}`
+        : "";
+    }
+  }
+
+  customElements.define("dynamodb-simulator-dashboard", DynamoSimulatorDashboard);
+})();
