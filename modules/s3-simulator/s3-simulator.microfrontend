@@ -1,0 +1,143 @@
+(function registerS3SimulatorWidget() {
+  const template = document.createElement("template");
+  template.innerHTML = `
+    <style>
+      :host {
+        display: block;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #0f172a;
+        border: 1px solid #cbd5f5;
+        border-radius: 8px;
+        padding: 16px;
+        background: #f8fafc;
+        box-shadow: 0 4px 8px rgba(15, 23, 42, 0.05);
+      }
+
+      .title {
+        margin: 0 0 12px 0;
+        font-size: 1.1rem;
+        font-weight: 600;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 12px;
+      }
+
+      .metric {
+        background: white;
+        border-radius: 6px;
+        border: 1px solid #e2e8f0;
+        padding: 12px;
+        text-align: center;
+      }
+
+      .metric .label {
+        display: block;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #475569;
+        margin-bottom: 4px;
+      }
+
+      .metric .value {
+        font-size: 1.4rem;
+        font-weight: 600;
+        color: #1e293b;
+      }
+
+      .status {
+        margin-top: 12px;
+        font-size: 0.8rem;
+        color: #475569;
+      }
+    </style>
+    <h3 class="title">S3 Simulator</h3>
+    <div class="metrics">
+      <div class="metric">
+        <span class="label">Archivos</span>
+        <span class="value" data-field="files">-</span>
+      </div>
+      <div class="metric">
+        <span class="label">Carpetas</span>
+        <span class="value" data-field="folders">-</span>
+      </div>
+      <div class="metric">
+        <span class="label">Tamaño Total</span>
+        <span class="value" data-field="size">-</span>
+      </div>
+    </div>
+    <div class="status" data-field="status">Preparando...</div>
+  `;
+
+  function formatBytes(bytes) {
+    if (typeof bytes !== "number" || !Number.isFinite(bytes)) {
+      return "-";
+    }
+    if (bytes === 0) {
+      return "0 B";
+    }
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    const value = bytes / Math.pow(1024, exponent);
+    return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[exponent]}`;
+  }
+
+  class S3SimulatorWidget extends HTMLElement {
+    constructor() {
+      super();
+      this.attachShadow({ mode: "open" });
+      this.shadowRoot.appendChild(template.content.cloneNode(true));
+      this._statusEl = this.shadowRoot.querySelector('[data-field="status"]');
+      this._filesEl = this.shadowRoot.querySelector('[data-field="files"]');
+      this._foldersEl = this.shadowRoot.querySelector('[data-field="folders"]');
+      this._sizeEl = this.shadowRoot.querySelector('[data-field="size"]');
+      this._refreshHandle = null;
+    }
+
+    connectedCallback() {
+      this._fetchMetrics();
+      const interval = Number(this.getAttribute("refresh-interval")) || 5000;
+      this._refreshHandle = window.setInterval(() => this._fetchMetrics(), interval);
+    }
+
+    disconnectedCallback() {
+      if (this._refreshHandle) {
+        window.clearInterval(this._refreshHandle);
+        this._refreshHandle = null;
+      }
+    }
+
+    get metricsUrl() {
+      return this.getAttribute("metrics-url") || "/metrics";
+    }
+
+    async _fetchMetrics() {
+      try {
+        this._statusEl.textContent = "Actualizando métricas...";
+        const response = await fetch(this.metricsUrl, { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`Error HTTP ${response.status}`);
+        }
+        const payload = await response.json();
+        const metrics = payload && payload.metrics ? payload.metrics : { totalFiles: 0, totalFolders: 0, totalSize: 0 };
+        this._filesEl.textContent = String(metrics.totalFiles ?? "-");
+        this._foldersEl.textContent = String(metrics.totalFolders ?? "-");
+        this._sizeEl.textContent = formatBytes(metrics.totalSize ?? 0);
+        const updatedAt = new Date().toLocaleTimeString();
+        this._statusEl.textContent = `Última actualización ${updatedAt}`;
+      } catch (error) {
+        this._statusEl.textContent = `Error: ${error.message}`;
+        this._filesEl.textContent = "-";
+        this._foldersEl.textContent = "-";
+        this._sizeEl.textContent = "-";
+      }
+    }
+  }
+
+  if (!window.customElements.get("s3-simulator-widget")) {
+    window.customElements.define("s3-simulator-widget", S3SimulatorWidget);
+  }
+})();

@@ -26,6 +26,10 @@
     {
       "module": "./modules/redis-simulator",
       "port": 4700
+    },
+    {
+      "module": "./modules/s3-simulator",
+      "port": 4800
     }
   ]
 }
