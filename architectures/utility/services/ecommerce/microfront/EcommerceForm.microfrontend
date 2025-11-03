@@ -1,0 +1,198 @@
+class UtilityEcommerceForm extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: "open" });
+    this.handleSubmit = this.handleSubmit.bind(this);
+    this.setStatus = this.setStatus.bind(this);
+  }
+
+  connectedCallback() {
+    this.render();
+  }
+
+  get bffUrl() {
+    return this.getAttribute("bff-url") || "/api/orders";
+  }
+
+  setStatus(message, type = "info") {
+    const statusEl = this.shadowRoot.querySelector("#status");
+    if (statusEl) {
+      statusEl.textContent = message;
+      statusEl.setAttribute("data-type", type);
+    }
+  }
+
+  getFormValues() {
+    const form = this.shadowRoot.querySelector("form");
+    if (!form) {
+      return null;
+    }
+    const data = new FormData(form);
+    return {
+      firstName: data.get("firstName") || "",
+      lastName: data.get("lastName") || "",
+      dni: data.get("dni") || "",
+      address: data.get("address") || "",
+      cups: data.get("cups") || "",
+      tariff: data.get("tariff") || "",
+    };
+  }
+
+  async submitOrder(payload) {
+    const response = await fetch(this.bffUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const errorPayload = await response.json().catch(() => ({}));
+      const message = errorPayload && errorPayload.error ? errorPayload.error : `HTTP ${response.status}`;
+      throw new Error(message);
+    }
+    return response.json();
+  }
+
+  async handleSubmit(event) {
+    event.preventDefault();
+    const payload = this.getFormValues();
+    this.setStatus("Enviando pedido...", "info");
+    try {
+      const result = await this.submitOrder(payload);
+      this.setStatus(`Pedido emitido (${result.orderId})`, "success");
+    } catch (error) {
+      this.setStatus(`Error: ${error.message}`, "error");
+    }
+  }
+
+  render() {
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host {
+          display: block;
+          font-family: 'Segoe UI', system-ui, sans-serif;
+          background: #ffffff;
+          border-radius: 12px;
+          border: 1px solid #e0e0e0;
+          padding: 20px;
+          box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+          max-width: 420px;
+        }
+        h2 {
+          margin: 0 0 16px;
+          font-size: 20px;
+          color: #0f172a;
+        }
+        form {
+          display: grid;
+          gap: 12px;
+        }
+        fieldset {
+          border: none;
+          margin: 0;
+          padding: 0;
+          display: grid;
+          gap: 10px;
+        }
+        legend {
+          font-size: 14px;
+          font-weight: 600;
+          color: #1e293b;
+          margin-bottom: 4px;
+        }
+        label {
+          display: grid;
+          gap: 6px;
+          font-size: 13px;
+          color: #334155;
+        }
+        input, select {
+          padding: 10px;
+          border-radius: 6px;
+          border: 1px solid #cbd5f5;
+          font-size: 14px;
+          transition: border 0.2s ease, box-shadow 0.2s ease;
+        }
+        input:focus, select:focus {
+          border-color: #4f46e5;
+          box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+          outline: none;
+        }
+        button {
+          margin-top: 8px;
+          padding: 12px 18px;
+          font-size: 15px;
+          font-weight: 600;
+          border: none;
+          border-radius: 8px;
+          background: linear-gradient(135deg, #4f46e5, #6366f1);
+          color: #fff;
+          cursor: pointer;
+          transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        button:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 10px 18px rgba(99, 102, 241, 0.25);
+        }
+        #status {
+          font-size: 13px;
+          color: #475569;
+          min-height: 18px;
+        }
+        #status[data-type="success"] {
+          color: #047857;
+        }
+        #status[data-type="error"] {
+          color: #b91c1c;
+        }
+      </style>
+      <h2>Pedido de luz</h2>
+      <form>
+        <fieldset>
+          <legend>Datos del cliente</legend>
+          <label>
+            Nombre
+            <input name="firstName" type="text" placeholder="María" required />
+          </label>
+          <label>
+            Apellidos
+            <input name="lastName" type="text" placeholder="García Pérez" required />
+          </label>
+          <label>
+            DNI
+            <input name="dni" type="text" placeholder="12345678Z" required />
+          </label>
+        </fieldset>
+        <fieldset>
+          <legend>Punto de suministro</legend>
+          <label>
+            Dirección
+            <input name="address" type="text" placeholder="Calle Mayor 1, Madrid" required />
+          </label>
+          <label>
+            CUPS
+            <input name="cups" type="text" placeholder="ES1234567890123456XY" required />
+          </label>
+        </fieldset>
+        <fieldset>
+          <legend>Tarifa</legend>
+          <label>
+            Selecciona una tarifa
+            <select name="tariff" required>
+              <option value="flex">Tarifa Flex 2.0TD</option>
+              <option value="night">Tarifa Noche 2.0TD</option>
+            </select>
+          </label>
+        </fieldset>
+        <button type="submit">Emitir pedido</button>
+      </form>
+      <div id="status">Completa el formulario y envía el pedido.</div>
+    `;
+
+    const form = this.shadowRoot.querySelector("form");
+    if (form) {
+      form.addEventListener("submit", this.handleSubmit);
+    }
+  }
+}
+
+customElements.define("utility-ecommerce-form", UtilityEcommerceForm);
