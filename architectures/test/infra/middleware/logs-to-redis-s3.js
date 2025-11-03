@@ -140,6 +140,37 @@ function start(options = {}) {
   let stopped = false;
   let timer = null;
   let running = false;
+  let lastProcessedAt = since;
+  let lastProcessedId = null;
+
+  const filterNewEvents = (events) => {
+    if (!Array.isArray(events) || events.length === 0) {
+      return [];
+    }
+    if (!lastProcessedId) {
+      return events.slice();
+    }
+    const referenceTime = new Date(lastProcessedAt).getTime();
+    return events.filter((event) => {
+      if (!event || !event.id) {
+        return false;
+      }
+      if (!event.recordedAt) {
+        return event.id !== lastProcessedId;
+      }
+      const eventTime = new Date(event.recordedAt).getTime();
+      if (!Number.isFinite(eventTime) || !Number.isFinite(referenceTime)) {
+        return event.id !== lastProcessedId;
+      }
+      if (eventTime > referenceTime) {
+        return true;
+      }
+      if (eventTime < referenceTime) {
+        return false;
+      }
+      return event.id !== lastProcessedId;
+    });
+  };
 
   const runCycle = async () => {
     if (running || stopped) {
@@ -148,21 +179,28 @@ function start(options = {}) {
     running = true;
     try {
       const events = await fetchEvents(eventLogConfig, since);
-      if (events.length > 0) {
-        totalProcessed += events.length;
-        const lastEvent = events[events.length - 1];
-        since = lastEvent.recordedAt || since;
+      const freshEvents = filterNewEvents(events);
+      if (freshEvents.length > 0) {
+        totalProcessed += freshEvents.length;
+        const lastEvent = freshEvents[freshEvents.length - 1];
+        if (lastEvent.recordedAt) {
+          lastProcessedAt = lastEvent.recordedAt;
+          since = lastProcessedAt;
+        }
+        if (lastEvent.id) {
+          lastProcessedId = lastEvent.id;
+        }
         const payload = {
-          lastRecordedAt: since,
+          lastRecordedAt: lastProcessedAt,
           totalProcessed,
           updatedAt: new Date().toISOString(),
         };
         await updateRedis(redisConfig, payload);
         const randomSnippet = crypto.randomBytes(6).toString("hex");
         const filename = `batch-${Date.now()}.txt`;
-        const content = `Processed ${events.length} events\nLastRecordedAt=${since}\nToken=${randomSnippet}\n`;
+        const content = `Processed ${freshEvents.length} events\nLastRecordedAt=${lastProcessedAt}\nToken=${randomSnippet}\n`;
         await uploadToS3(s3Config, filename, content);
-        console.info(`[logs-to-redis-s3] Procesados ${events.length} eventos, total ${totalProcessed}`);
+        console.info(`[logs-to-redis-s3] Procesados ${freshEvents.length} eventos, total ${totalProcessed}`);
       }
     } catch (error) {
       console.error(`[logs-to-redis-s3] Error en ciclo: ${error.message}`);
