@@ -24,6 +24,18 @@ function ensureDataDirectory() {
   }
 }
 
+async function resetDataDirectory() {
+  try {
+    await fs.promises.rm(DATA_DIRECTORY, { recursive: true, force: true });
+  } catch (error) {
+    console.warn(
+      `[dynamodb-simulator] Failed to reset data directory: ${error.message}`
+    );
+  }
+  await fs.promises.mkdir(DATA_DIRECTORY, { recursive: true });
+  state.collections.clear();
+}
+
 function sanitizeCollectionName(name) {
   return String(name || "default")
     .trim()
@@ -454,7 +466,7 @@ function handleRequest(request, response) {
 }
 
 async function start({ port = 4600 } = {}) {
-  ensureDataDirectory();
+  await resetDataDirectory();
   await loadCollectionsFromDisk();
   const server = http.createServer((request, response) => {
     try {
