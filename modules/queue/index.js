@@ -2,8 +2,19 @@
 
 const http = require("http");
 const url = require("url");
+const fs = require("node:fs");
+const path = require("node:path");
 
-const microfrontendScript = require("./microfrontend");
+const microfrontendPath = path.join(__dirname, "queue-monitor.microfrontend");
+
+let cachedMicrofrontendScript = null;
+
+function getMicrofrontendScript() {
+  if (cachedMicrofrontendScript === null) {
+    cachedMicrofrontendScript = fs.readFileSync(microfrontendPath, "utf8");
+  }
+  return cachedMicrofrontendScript;
+}
 
 const queues = new Map();
 const state = {
@@ -95,7 +106,7 @@ function handleMetrics(response) {
 }
 
 function handleMicrofrontend(response) {
-  const script = microfrontendScript;
+  const script = getMicrofrontendScript();
   response.writeHead(200, {
     "Content-Type": "application/javascript",
     "Access-Control-Allow-Origin": "*",

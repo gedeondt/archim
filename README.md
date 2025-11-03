@@ -47,7 +47,10 @@ module.exports = {
 - `start(options)` recibe siempre un objeto con al menos `port`. Debe devolver un objeto que exponga
   un método `stop()` que cierre recursos (servidores HTTP, timers, conexiones, etc.).
 - Si el módulo provee un micro frontend, exporta el objeto `microfrontend` con `tagName`, `url` y
-  `props` opcionales. El tester realizará un smoke test sobre esta metadata.
+  `props` opcionales. El tester realizará un smoke test sobre esta metadata. El código del micro
+  frontend debe residir en un archivo con extensión `.microfrontend` dentro del propio módulo
+  (por ejemplo `./modules/<nombre>/<tag>.microfrontend`) y cargarse en memoria con `fs.readFileSync`
+  para servirlo tal cual, evitando plantillas con interpolaciones propensas a fallos.
 - Documenta los parámetros adicionales aceptados por `start()` (por ejemplo `widgets`, `metricsUrl`) en
   la cabecera del archivo o en comentarios visibles.
 
@@ -111,7 +114,9 @@ Es un buen punto de referencia para:
 
 - Estructura del servidor HTTP con rutas REST (`/queues/:name/messages`, `/metrics`).
 - Pruebas end-to-end en `test.js` que validan la cola real en ejecución.
-- Micro frontend accesible en `/microfrontends/queue-monitor.js` que consulta las métricas periódicamente.
+- Micro frontend accesible en `/microfrontends/queue-monitor.js`, servido leyendo el archivo
+  `queue-monitor.microfrontend` directamente desde disco para evitar escapes o transformaciones
+  adicionales, que consulta las métricas periódicamente.
 
 ## Checklist para nuevos módulos
 
