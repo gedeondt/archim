@@ -46,6 +46,15 @@ const DEFAULT_WIDGETS = [
       "metrics-url": "http://localhost:4600/metrics",
     },
   },
+  {
+    id: "redis-simulator",
+    title: "Redis Simulator",
+    url: "http://localhost:4700/microfrontends/redis-simulator.js",
+    tagName: "redis-simulator-dashboard",
+    props: {
+      "metrics-url": "http://localhost:4700/metrics",
+    },
+  },
 ];
 
 function loadFile(filePath) {

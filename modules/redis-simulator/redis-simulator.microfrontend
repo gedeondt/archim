@@ -1,0 +1,125 @@
+class RedisSimulatorDashboard extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+    this.shadowRoot.innerHTML = `
+<style>
+  :host {
+    display: block;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #ffffff;
+    border: 1px solid #d3d3d3;
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    min-width: 260px;
+    max-width: 420px;
+    color: #1f2933;
+  }
+  h2 {
+    margin: 0 0 0.75rem;
+    font-size: 1.15rem;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+  .metric {
+    padding: 0.75rem;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #f4f6fb 0%, #eef2ff 100%);
+    box-shadow: inset 0 0 0 1px rgba(39, 74, 141, 0.08);
+  }
+  .metric__label {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.25rem;
+    color: #52606d;
+  }
+  .metric__value {
+    font-size: 1.75rem;
+    font-weight: 700;
+  }
+  button {
+    margin-top: 1rem;
+    width: 100%;
+    padding: 0.6rem 1rem;
+    border-radius: 6px;
+    border: none;
+    background: #0059b2;
+    color: #ffffff;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover {
+    background: #00408a;
+  }
+  .status {
+    margin-top: 0.75rem;
+    font-size: 0.8rem;
+    color: #52606d;
+  }
+</style>
+<h2>Redis Simulator</h2>
+<div class="grid">
+  <div class="metric"><div class="metric__label">Claves totales</div><div class="metric__value" id="total">0</div></div>
+  <div class="metric"><div class="metric__label">Listas</div><div class="metric__value" id="lists">0</div></div>
+  <div class="metric"><div class="metric__label">Sets</div><div class="metric__value" id="sets">0</div></div>
+  <div class="metric"><div class="metric__label">Por caducar</div><div class="metric__value" id="expiring">0</div></div>
+</div>
+<button id="refresh">Actualizar métricas</button>
+<div class="status" id="status">Actualizado automáticamente cada 5s</div>`;
+    this._onRefresh = this._onRefresh.bind(this);
+    this._poll = null;
+  }
+
+  connectedCallback() {
+    this.shadowRoot.getElementById('refresh').addEventListener('click', this._onRefresh);
+    this._fetchMetrics();
+    this._poll = setInterval(() => this._fetchMetrics(), 5000);
+  }
+
+  disconnectedCallback() {
+    this.shadowRoot.getElementById('refresh').removeEventListener('click', this._onRefresh);
+    if (this._poll) {
+      clearInterval(this._poll);
+      this._poll = null;
+    }
+  }
+
+  _onRefresh() {
+    this._fetchMetrics();
+  }
+
+  async _fetchMetrics() {
+    const metricsUrl = this.getAttribute('metrics-url') || '/metrics';
+    const statusEl = this.shadowRoot.getElementById('status');
+    try {
+      statusEl.textContent = 'Actualizando métricas…';
+      const response = await fetch(metricsUrl, { cache: 'no-store' });
+      if (!response.ok) {
+        throw new Error(`Respuesta ${response.status}`);
+      }
+      const data = await response.json();
+      this._updateMetric('total', data.totalKeys ?? 0);
+      this._updateMetric('lists', data.listCount ?? 0);
+      this._updateMetric('sets', data.setCount ?? 0);
+      this._updateMetric('expiring', data.expiringSoon ?? 0);
+      const windowSeconds = data.expiringSoonWindowSeconds ?? 5;
+      statusEl.textContent = `Ventana de caducidad: ${windowSeconds}s`;
+    } catch (error) {
+      statusEl.textContent = 'Error al cargar métricas';
+      console.error('[redis-simulator-dashboard]', error);
+    }
+  }
+
+  _updateMetric(id, value) {
+    const target = this.shadowRoot.getElementById(id);
+    if (target) {
+      target.textContent = value;
+    }
+  }
+}
+
+customElements.define('redis-simulator-dashboard', RedisSimulatorDashboard);
