@@ -64,109 +64,38 @@
       if (!this.shadowRoot) {
         return;
       }
+      const bootstrapCdn =
+        "https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css";
       this.shadowRoot.innerHTML = `
+        <link rel="stylesheet" href="${bootstrapCdn}">
         <style>
           :host {
             display: block;
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            color: #1f2933;
-            background: #ffffff;
-            border-radius: 12px;
-            box-shadow: 0 8px 16px rgba(15, 23, 42, 0.08);
-            padding: 20px;
-            min-height: 220px;
-          }
-          h2 {
-            margin: 0 0 12px;
-            font-size: 1.25rem;
-            color: #0b7285;
-          }
-          .summary {
-            display: flex;
-            gap: 16px;
-            margin-bottom: 16px;
-            flex-wrap: wrap;
-          }
-          .summary-card {
-            flex: 1 1 140px;
-            background: linear-gradient(135deg, #e3f2fd 0%, #f1f5f9 100%);
-            border-radius: 10px;
-            padding: 16px;
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
-          }
-          .summary-card h3 {
-            margin: 0;
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: #486581;
-          }
-          .summary-card p {
-            margin: 8px 0 0;
-            font-size: 1.6rem;
-            font-weight: 600;
-            color: #102a43;
-          }
-          .databases {
-            display: grid;
-            gap: 12px;
-          }
-          .database-card {
-            border: 1px solid #d9e2ec;
-            border-radius: 10px;
-            padding: 14px 16px;
-            background: #f8fafc;
-          }
-          .database-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            margin-bottom: 8px;
-          }
-          .database-name {
-            font-weight: 600;
-            font-size: 1rem;
-          }
-          .table-list {
-            margin: 0;
-            padding: 0;
-            list-style: none;
-            display: grid;
-            gap: 6px;
-          }
-          .table-item {
-            display: flex;
-            justify-content: space-between;
-            background: #ffffff;
-            border-radius: 8px;
-            padding: 8px 12px;
-            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
-            font-size: 0.9rem;
-          }
-          .table-item span {
-            display: inline-flex;
-            gap: 6px;
-          }
-          .error {
-            color: #c81e1e;
-            background: #fde8e8;
-            border: 1px solid #f8b4b4;
-            border-radius: 8px;
-            padding: 12px;
           }
         </style>
-        <h2>MySQL Simulator</h2>
-        <div class="summary" role="list">
-          <div class="summary-card" role="listitem">
-            <h3>Consultas</h3>
-            <p id="query-count">0</p>
-          </div>
-          <div class="summary-card" role="listitem">
-            <h3>Bases de datos</h3>
-            <p id="database-count">0</p>
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+              <h2 class="h5 mb-0">MySQL Simulator</h2>
+              <div class="text-muted small">Actualiza automáticamente cada 4s</div>
+            </div>
+            <div class="row g-3 mb-3" role="list">
+              <div class="col-12 col-sm-6" role="listitem">
+                <div class="bg-light border rounded-3 p-3 h-100">
+                  <div class="text-uppercase text-muted small fw-semibold">Consultas</div>
+                  <p class="h3 mb-0" id="query-count">0</p>
+                </div>
+              </div>
+              <div class="col-12 col-sm-6" role="listitem">
+                <div class="bg-light border rounded-3 p-3 h-100">
+                  <div class="text-uppercase text-muted small fw-semibold">Bases de datos</div>
+                  <p class="h3 mb-0" id="database-count">0</p>
+                </div>
+              </div>
+            </div>
+            <div id="content"></div>
           </div>
         </div>
-        <div id="content"></div>
       `;
     }
 
@@ -188,7 +117,8 @@
       }
       const databases = Array.isArray(payload.databases) ? payload.databases : [];
       if (databases.length === 0) {
-        contentEl.innerHTML = "<p>No hay bases de datos registradas.</p>";
+        contentEl.innerHTML =
+          '<div class="alert alert-info mb-0">No hay bases de datos registradas.</div>';
         return;
       }
       const databaseCards = databases
@@ -196,31 +126,31 @@
           const tables = Array.isArray(database.tables) ? database.tables : [];
           const tableItems = tables
             .map((table) => `
-              <li class="table-item">
-                <span>
-                  <strong>${table.name}</strong>
-                </span>
-                <span>
+              <li class="list-group-item d-flex justify-content-between align-items-center">
+                <div class="fw-semibold">${table.name}</div>
+                <div class="d-flex flex-column flex-sm-row gap-2 text-muted small">
                   <span>${table.columnCount ?? 0} columnas</span>
                   <span>${table.rowCount ?? 0} registros</span>
-                </span>
+                </div>
               </li>
             `)
             .join("");
           return `
-            <section class="database-card">
-              <div class="database-header">
-                <span class="database-name">${database.name}</span>
-                <span>${tables.length} tablas</span>
+            <section class="card border-0 shadow-sm mb-3">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                  <span class="fw-semibold">${database.name}</span>
+                  <span class="badge text-bg-secondary align-self-start">${tables.length} tablas</span>
+                </div>
+                <ul class="list-group list-group-flush">
+                  ${tableItems || '<li class="list-group-item text-muted fst-italic">No hay tablas registradas.</li>'}
+                </ul>
               </div>
-              <ul class="table-list">
-                ${tableItems || "<li>No hay tablas registradas.</li>"}
-              </ul>
             </section>
           `;
         })
         .join("");
-      contentEl.innerHTML = `<div class="databases">${databaseCards}</div>`;
+      contentEl.innerHTML = databaseCards;
     }
 
     renderError(message) {
@@ -229,7 +159,7 @@
       }
       const contentEl = this.shadowRoot.querySelector("#content");
       if (contentEl) {
-        contentEl.innerHTML = `<div class="error">${message}</div>`;
+        contentEl.innerHTML = `<div class="alert alert-danger" role="alert">${message}</div>`;
       }
     }
   }

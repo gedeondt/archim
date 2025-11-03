@@ -5,107 +5,40 @@
 
   const template = document.createElement("template");
   template.innerHTML = `
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
     <style>
       :host {
         display: block;
-        font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
-        color: #1f2933;
-      }
-
-      .stats {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-        gap: 1rem;
-      }
-
-      .card {
-        border-radius: 0.75rem;
-        border: 1px solid #e5e7eb;
-        background: #ffffff;
-        padding: 1rem;
-        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
-      }
-
-      .card h3 {
-        margin: 0;
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        color: #6b7280;
-      }
-
-      .card strong {
-        font-size: 1.75rem;
-        font-weight: 700;
-        display: block;
-        margin-top: 0.25rem;
-      }
-
-      ul.collections {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 0.35rem;
-      }
-
-      ul.collections li {
-        display: flex;
-        justify-content: space-between;
-        padding: 0.35rem 0.5rem;
-        border-radius: 0.5rem;
-        background-color: #f3f4f6;
-      }
-
-      .timestamp {
-        display: block;
-        margin-top: 1rem;
-        font-size: 0.75rem;
-        color: #9ca3af;
-      }
-
-      button.refresh {
-        margin-top: 1rem;
-        padding: 0.5rem 0.75rem;
-        border-radius: 0.5rem;
-        border: none;
-        background-color: #2563eb;
-        color: #ffffff;
-        font-weight: 600;
-        cursor: pointer;
-      }
-
-      button.refresh:hover {
-        background-color: #1d4ed8;
-      }
-
-      .error {
-        color: #b91c1c;
-        background: #fee2e2;
-        border-radius: 0.5rem;
-        padding: 0.75rem;
-        margin-top: 0.5rem;
       }
     </style>
-    <div class="stats">
-      <div class="card">
-        <h3>Colecciones</h3>
-        <strong data-field="collections">0</strong>
-      </div>
-      <div class="card">
-        <h3>Documentos totales</h3>
-        <strong data-field="documents">0</strong>
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="row row-cols-1 row-cols-sm-2 g-3" data-field="stats">
+          <div class="col">
+            <div class="bg-light border rounded-3 p-3 h-100">
+              <div class="text-uppercase text-muted small fw-semibold">Colecciones</div>
+              <div class="display-6 fs-2 fw-semibold" data-field="collections">0</div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="bg-light border rounded-3 p-3 h-100">
+              <div class="text-uppercase text-muted small fw-semibold">Documentos totales</div>
+              <div class="display-6 fs-2 fw-semibold" data-field="documents">0</div>
+            </div>
+          </div>
+        </div>
+        <section class="mt-4">
+          <div class="d-flex justify-content-between align-items-center gap-3 mb-2">
+            <h3 class="h6 mb-0">Documentos por colección</h3>
+            <button class="refresh btn btn-sm btn-primary" type="button">Actualizar métricas</button>
+          </div>
+          <div class="list-group" data-field="collections-list"></div>
+          <p class="empty text-muted fst-italic mb-0" hidden>No hay colecciones todavía.</p>
+        </section>
+        <span class="d-block text-muted small mt-3" data-field="timestamp"></span>
+        <div class="alert alert-danger mt-3 mb-0" hidden data-field="error" role="alert"></div>
       </div>
     </div>
-    <section class="card" style="margin-top:1rem;">
-      <h3>Documentos por colección</h3>
-      <ul class="collections" data-field="collections-list"></ul>
-      <p class="empty" hidden>No hay colecciones todavía.</p>
-    </section>
-    <span class="timestamp" data-field="timestamp"></span>
-    <button class="refresh" type="button">Actualizar métricas</button>
-    <div class="error" hidden data-field="error"></div>
   `;
 
   class DynamoSimulatorDashboard extends HTMLElement {
@@ -202,10 +135,13 @@
         collectionNames
           .sort((a, b) => a.localeCompare(b))
           .forEach((name) => {
-            const item = document.createElement("li");
+            const item = document.createElement("div");
+            item.className = "list-group-item d-flex justify-content-between align-items-center";
             const label = document.createElement("span");
+            label.className = "fw-semibold";
             label.textContent = name;
-            const value = document.createElement("strong");
+            const value = document.createElement("span");
+            value.className = "badge text-bg-secondary";
             value.textContent = Number(perCollection[name] || 0).toLocaleString("es-ES");
             item.append(label, value);
             list.appendChild(item);
