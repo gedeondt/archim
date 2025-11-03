@@ -1,0 +1,91 @@
+{
+  "phases": [
+    {
+      "phase": "boot-infra",
+      "pieces": [
+        { "module": "./modules/event-log", "port": 4400 },
+        { "module": "./modules/mysql-simulator", "port": 4500, "options": { "mysqlPort": 3307 } },
+        {
+          "module": "./modules/dashboard",
+          "port": 4300,
+          "options": {
+            "widgets": {
+              "architecture": [
+                {
+                  "id": "utility-ecommerce",
+                  "title": "Utility Ecommerce",
+                  "url": "http://localhost:5800/microfront/ecommerce-form.js",
+                  "tagName": "utility-ecommerce-form",
+                  "props": {
+                    "bff-url": "http://localhost:5800/api/orders"
+                  }
+                },
+                {
+                  "id": "utility-event-log",
+                  "title": "Eventos ecommerce",
+                  "url": "http://localhost:4400/microfrontends/event-log-monitor.js",
+                  "tagName": "event-log-monitor",
+                  "props": {
+                    "metrics-url": "http://localhost:4400/metrics"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "phase": "initialize",
+      "pieces": [
+        {
+          "module": "./architectures/utility/init/initialize.js",
+          "options": {
+            "mysql": {
+              "schema": "./architectures/utility/init/mysql/crm-schema.sql",
+              "host": "localhost",
+              "port": 3307,
+              "user": "root",
+              "password": ""
+            }
+          }
+        }
+      ]
+    },
+    {
+      "phase": "start-middleware",
+      "pieces": [
+        {
+          "module": "./architectures/utility/infra/middleware/event-log-to-crm.js",
+          "options": {
+            "pollIntervalMs": 4000,
+            "eventLog": {
+              "endpoint": "http://localhost:4400",
+              "queueName": "ecommerce"
+            },
+            "mysql": {
+              "host": "localhost",
+              "port": 3307,
+              "user": "root",
+              "password": "",
+              "database": "crm"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "phase": "start-services",
+      "pieces": [
+        {
+          "module": "./architectures/utility/services/ecommerce/bff/index.js",
+          "port": 5800,
+          "options": {
+            "eventLogUrl": "http://localhost:4400/event-log/queues/ecommerce/events",
+            "microfrontPath": "./architectures/utility/services/ecommerce/microfront/EcommerceForm.microfrontend"
+          }
+        }
+      ]
+    }
+  ]
+}
