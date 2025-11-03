@@ -9,18 +9,20 @@
           "module": "./modules/dashboard",
           "port": 4300,
           "options": {
-            "architecture": [
-              {
-                "id": "test-emitter",
-                "title": "Test Emitter",
-                "url": "http://localhost:5700/microfront/emit-button.js",
-                "tagName": "test-emitter",
-                "props": {
-                  "bff-url": "http://localhost:5700/api/emit",
-                  "auto-interval": "1500"
+            "widgets": {
+              "architecture": [
+                {
+                  "id": "test-emitter",
+                  "title": "Test Emitter",
+                  "url": "http://localhost:5700/microfront/emit-button.js",
+                  "tagName": "test-emitter",
+                  "props": {
+                    "bff-url": "http://localhost:5700/api/emit",
+                    "auto-interval": "1500"
+                  }
                 }
-              }
-            ]
+              ]
+            }
           }
         },
         { "module": "./modules/mysql-simulator", "port": 4500, "options": { "mysqlPort": 3307 } },
