@@ -19,6 +19,15 @@ const DEFAULT_WIDGETS = [
       "queues-url": "http://localhost:4200/queues",
     },
   },
+  {
+    id: "event-log-monitor",
+    title: "Event Log",
+    url: "http://localhost:4400/microfrontends/event-log-monitor.js",
+    tagName: "event-log-monitor",
+    props: {
+      "metrics-url": "http://localhost:4400/metrics",
+    },
+  },
 ];
 
 function loadFile(filePath) {

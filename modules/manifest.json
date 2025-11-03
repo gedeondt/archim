@@ -5,6 +5,10 @@
       "port": 4200
     },
     {
+      "module": "./modules/event-log",
+      "port": 4400
+    },
+    {
       "module": "./modules/dashboard",
       "port": 4300
     }
