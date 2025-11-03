@@ -22,6 +22,10 @@
     {
       "module": "./modules/dynamodb-simulator",
       "port": 4600
+    },
+    {
+      "module": "./modules/redis-simulator",
+      "port": 4700
     }
   ]
 }
