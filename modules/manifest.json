@@ -18,6 +18,10 @@
       "options": {
         "mysqlPort": 3307
       }
+    },
+    {
+      "module": "./modules/dynamodb-simulator",
+      "port": 4600
     }
   ]
 }
