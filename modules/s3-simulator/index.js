@@ -338,9 +338,23 @@ function handleWidget(response) {
   response.end(readMicrofrontend());
 }
 
+function applyCors(response) {
+  response.setHeader("access-control-allow-origin", "*");
+  response.setHeader("access-control-allow-methods", "GET,POST,DELETE,OPTIONS");
+  response.setHeader("access-control-allow-headers", "content-type");
+}
+
 async function routeRequest(request, response) {
+  applyCors(response);
+
   const parsedUrl = new URL(request.url, "http://localhost");
   const pathname = parsedUrl.pathname || "/";
+
+  if (request.method === "OPTIONS") {
+    response.writeHead(204);
+    response.end();
+    return;
+  }
 
   if (request.method === "POST" && (pathname === "/upload" || pathname.startsWith("/upload/"))) {
     const uploadPrefix = pathname.length > "/upload/".length ? pathname.slice("/upload/".length) : "";
