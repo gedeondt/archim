@@ -28,6 +28,16 @@ function ensureDataRoot() {
   }
 }
 
+async function resetDataRoot() {
+  try {
+    await fs.promises.rm(DATA_ROOT, { recursive: true, force: true });
+  } catch (error) {
+    console.warn(`[s3-simulator] Failed to reset data directory: ${error.message}`);
+  }
+  await fs.promises.mkdir(DATA_ROOT, { recursive: true });
+  state.index.clear();
+}
+
 function normalizeS3Key(input) {
   if (!input) {
     return "";
@@ -393,36 +403,34 @@ async function routeRequest(request, response) {
   response.end(JSON.stringify({ ok: false, message: "Ruta no encontrada" }));
 }
 
-function start({ port = 4800 } = {}) {
-  ensureDataRoot();
-  return rebuildIndex().then(
-    () =>
-      new Promise((resolve) => {
-        const server = http.createServer((request, response) => {
-          Promise.resolve(routeRequest(request, response)).catch((error) => {
-            console.error(`[s3-simulator] Error handling request: ${error.message}`);
-            response.writeHead(500, { "content-type": "application/json" });
-            response.end(JSON.stringify({ ok: false, message: "Error interno" }));
-          });
-        });
-        server.listen(port, () => {
-          console.info(`[s3-simulator] Listening on port ${port}`);
-          resolve({
-            server,
-            stop: () =>
-              new Promise((stopResolve, stopReject) => {
-                server.close((error) => {
-                  if (error) {
-                    stopReject(error);
-                  } else {
-                    stopResolve();
-                  }
-                });
-              }),
-          });
-        });
-      })
-  );
+async function start({ port = 4800 } = {}) {
+  await resetDataRoot();
+  await rebuildIndex();
+  return new Promise((resolve) => {
+    const server = http.createServer((request, response) => {
+      Promise.resolve(routeRequest(request, response)).catch((error) => {
+        console.error(`[s3-simulator] Error handling request: ${error.message}`);
+        response.writeHead(500, { "content-type": "application/json" });
+        response.end(JSON.stringify({ ok: false, message: "Error interno" }));
+      });
+    });
+    server.listen(port, () => {
+      console.info(`[s3-simulator] Listening on port ${port}`);
+      resolve({
+        server,
+        stop: () =>
+          new Promise((stopResolve, stopReject) => {
+            server.close((error) => {
+              if (error) {
+                stopReject(error);
+              } else {
+                stopResolve();
+              }
+            });
+          }),
+      });
+    });
+  });
 }
 
 module.exports = {
