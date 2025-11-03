@@ -28,6 +28,15 @@ const DEFAULT_WIDGETS = [
       "metrics-url": "http://localhost:4400/metrics",
     },
   },
+  {
+    id: "mysql-simulator",
+    title: "MySQL Simulator",
+    url: "http://localhost:4500/microfrontends/mysql-simulator.js",
+    tagName: "mysql-simulator-dashboard",
+    props: {
+      "metrics-url": "http://localhost:4500/metrics",
+    },
+  },
 ];
 
 function loadFile(filePath) {

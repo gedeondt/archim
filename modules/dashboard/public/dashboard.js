@@ -10,6 +10,15 @@ const DEFAULT_WIDGETS = [
     url: "http://localhost:4200/microfrontends/queue-monitor.js",
     tagName: "queue-monitor",
   },
+  {
+    id: "mysql-simulator",
+    title: "MySQL Simulator",
+    url: "http://localhost:4500/microfrontends/mysql-simulator.js",
+    tagName: "mysql-simulator-dashboard",
+    props: {
+      "metrics-url": "http://localhost:4500/metrics",
+    },
+  },
 ];
 
 function loadMicrofrontendScript(url) {
