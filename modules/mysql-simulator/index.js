@@ -7,6 +7,37 @@ const http = require("node:http");
 const crypto = require("node:crypto");
 const Database = require("better-sqlite3");
 
+const MysqlTypes = {
+  DECIMAL: 0x00,
+  TINY: 0x01,
+  SHORT: 0x02,
+  LONG: 0x03,
+  FLOAT: 0x04,
+  DOUBLE: 0x05,
+  NULL: 0x06,
+  TIMESTAMP: 0x07,
+  LONGLONG: 0x08,
+  INT24: 0x09,
+  DATE: 0x0a,
+  TIME: 0x0b,
+  DATETIME: 0x0c,
+  YEAR: 0x0d,
+  NEWDATE: 0x0e,
+  VARCHAR: 0x0f,
+  BIT: 0x10,
+  JSON: 0xf5,
+  NEWDECIMAL: 0xf6,
+  ENUM: 0xf7,
+  SET: 0xf8,
+  TINY_BLOB: 0xf9,
+  MEDIUM_BLOB: 0xfa,
+  LONG_BLOB: 0xfb,
+  BLOB: 0xfc,
+  VAR_STRING: 0xfd,
+  STRING: 0xfe,
+  GEOMETRY: 0xff,
+};
+
 const dataDirectory = path.join(__dirname, "data");
 const microfrontendPath = path.join(__dirname, "mysql-simulator.microfrontend");
 
@@ -36,6 +67,10 @@ const SERVER_CAPABILITIES =
 
 const MYSQL_TYPE_VAR_STRING = 0xfd;
 const MYSQL_CHARACTER_SET_UTF8MB4 = 0x21;
+
+const MYSQL_COMMAND_STMT_PREPARE = 0x16;
+const MYSQL_COMMAND_STMT_EXECUTE = 0x17;
+const MYSQL_COMMAND_STMT_CLOSE = 0x19;
 
 let cachedMicrofrontend = null;
 
@@ -236,6 +271,33 @@ function buildRowPacket(sequenceId, values) {
   return buildPacket(sequenceId, Buffer.concat(parts));
 }
 
+function buildBinaryRowPacket(sequenceId, values, columnCount) {
+  const header = Buffer.from([0x00]);
+  const nullBitmapLength = Math.floor((columnCount + 2 + 7) / 8);
+  const nullBitmap = Buffer.alloc(nullBitmapLength, 0);
+  const parts = [header, nullBitmap];
+
+  for (let index = 0; index < columnCount; index += 1) {
+    const value = values[index];
+    if (value === null || value === undefined) {
+      const bitmapIndex = Math.floor((index + 2) / 8);
+      const bit = (index + 2) % 8;
+      nullBitmap[bitmapIndex] |= 1 << bit;
+      continue;
+    }
+
+    if (Buffer.isBuffer(value)) {
+      parts.push(writeLengthEncodedInteger(value.length));
+      parts.push(Buffer.from(value));
+    } else {
+      const stringValue = typeof value === "string" ? value : String(value);
+      parts.push(writeLengthEncodedString(stringValue));
+    }
+  }
+
+  return buildPacket(sequenceId, Buffer.concat(parts));
+}
+
 function readLengthEncodedInteger(buffer, offset) {
   const first = buffer[offset];
   if (first < 0xfb) {
@@ -253,13 +315,206 @@ function readLengthEncodedInteger(buffer, offset) {
   return [null, 1];
 }
 
-async function runSelectQuery(databaseName, sql) {
+function countStatementParameters(sql) {
+  let count = 0;
+  let inSingle = false;
+  let inDouble = false;
+  let inBacktick = false;
+  for (let index = 0; index < sql.length; index += 1) {
+    const char = sql[index];
+    const prev = index > 0 ? sql[index - 1] : null;
+    if (char === "'" && !inDouble && !inBacktick && prev !== "\\") {
+      inSingle = !inSingle;
+      continue;
+    }
+    if (char === '"' && !inSingle && !inBacktick && prev !== "\\") {
+      inDouble = !inDouble;
+      continue;
+    }
+    if (char === "`" && !inSingle && !inDouble && prev !== "\\") {
+      inBacktick = !inBacktick;
+      continue;
+    }
+    if (char === "?" && !inSingle && !inDouble && !inBacktick) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function buildStmtPrepareOkPacket(sequenceId, { statementId, numColumns = 0, numParams = 0, warnings = 0 }) {
+  const payload = Buffer.alloc(12);
+  payload[0] = MYSQL_OK;
+  payload.writeUInt32LE(statementId, 1);
+  payload.writeUInt16LE(numColumns, 5);
+  payload.writeUInt16LE(numParams, 7);
+  payload[9] = 0x00;
+  payload.writeUInt16LE(warnings, 10);
+  return buildPacket(sequenceId, payload);
+}
+
+function padNumber(value, length) {
+  return String(value).padStart(length, "0");
+}
+
+function parseBinaryDateOrDateTime(buffer, offset, type) {
+  const length = buffer[offset];
+  let consumed = 1;
+  if (length === 0) {
+    if (type === MysqlTypes.DATE || type === MysqlTypes.NEWDATE) {
+      return ["0000-00-00", consumed];
+    }
+    return ["0000-00-00 00:00:00", consumed];
+  }
+
+  const year = buffer.readUInt16LE(offset + consumed);
+  consumed += 2;
+  const month = buffer[offset + consumed];
+  consumed += 1;
+  const day = buffer[offset + consumed];
+  consumed += 1;
+
+  let result = `${padNumber(year, 4)}-${padNumber(month, 2)}-${padNumber(day, 2)}`;
+
+  if (type === MysqlTypes.DATE || type === MysqlTypes.NEWDATE || length === 4) {
+    return [result, consumed];
+  }
+
+  const hour = buffer[offset + consumed];
+  consumed += 1;
+  const minute = buffer[offset + consumed];
+  consumed += 1;
+  const second = buffer[offset + consumed];
+  consumed += 1;
+  result += ` ${padNumber(hour, 2)}:${padNumber(minute, 2)}:${padNumber(second, 2)}`;
+
+  if (length > 7) {
+    const microseconds = buffer.readUInt32LE(offset + consumed);
+    consumed += 4;
+    if (microseconds > 0) {
+      result += `.${padNumber(microseconds, 6)}`;
+    }
+  }
+
+  return [result, consumed];
+}
+
+function parseBinaryTime(buffer, offset) {
+  const length = buffer[offset];
+  let consumed = 1;
+  if (length === 0) {
+    return ["00:00:00", consumed];
+  }
+  const isNegative = buffer[offset + consumed] === 1;
+  consumed += 1;
+  const days = buffer.readUInt32LE(offset + consumed);
+  consumed += 4;
+  const hours = buffer[offset + consumed];
+  consumed += 1;
+  const minutes = buffer[offset + consumed];
+  consumed += 1;
+  const seconds = buffer[offset + consumed];
+  consumed += 1;
+
+  let microseconds = 0;
+  if (length > 8) {
+    microseconds = buffer.readUInt32LE(offset + consumed);
+    consumed += 4;
+  }
+
+  const totalHours = days * 24 + hours;
+  let result = `${padNumber(totalHours, 2)}:${padNumber(minutes, 2)}:${padNumber(seconds, 2)}`;
+  if (microseconds > 0) {
+    result += `.${padNumber(microseconds, 6)}`;
+  }
+  if (isNegative) {
+    result = `-${result}`;
+  }
+  return [result, consumed];
+}
+
+function parseBinaryParameterValue(buffer, offset, type, unsignedFlag = false) {
+  switch (type) {
+    case MysqlTypes.NULL:
+      return [null, 0];
+    case MysqlTypes.TINY:
+      return [unsignedFlag ? buffer.readUInt8(offset) : buffer.readInt8(offset), 1];
+    case MysqlTypes.SHORT:
+      return [unsignedFlag ? buffer.readUInt16LE(offset) : buffer.readInt16LE(offset), 2];
+    case MysqlTypes.LONG:
+      return [unsignedFlag ? buffer.readUInt32LE(offset) : buffer.readInt32LE(offset), 4];
+    case MysqlTypes.LONGLONG: {
+      const low = buffer.readUInt32LE(offset);
+      const high = buffer.readUInt32LE(offset + 4);
+      let value = (BigInt(high) << 32n) | BigInt(low);
+      if (!unsignedFlag && (high & 0x80000000)) {
+        value -= 1n << 64n;
+      }
+      return [Number(value), 8];
+    }
+    case MysqlTypes.FLOAT:
+      return [buffer.readFloatLE(offset), 4];
+    case MysqlTypes.DOUBLE:
+      return [buffer.readDoubleLE(offset), 8];
+    case MysqlTypes.TIMESTAMP:
+    case MysqlTypes.DATETIME:
+    case MysqlTypes.DATE:
+    case MysqlTypes.NEWDATE: {
+      return parseBinaryDateOrDateTime(buffer, offset, type);
+    }
+    case MysqlTypes.TIME: {
+      return parseBinaryTime(buffer, offset);
+    }
+    case MysqlTypes.YEAR:
+      return [buffer.readUInt8(offset) + 1900, 1];
+    case MysqlTypes.JSON:
+    case MysqlTypes.DECIMAL:
+    case MysqlTypes.NEWDECIMAL:
+    case MysqlTypes.VARCHAR:
+    case MysqlTypes.STRING:
+    case MysqlTypes.VAR_STRING:
+    case MysqlTypes.TINY_BLOB:
+    case MysqlTypes.MEDIUM_BLOB:
+    case MysqlTypes.LONG_BLOB:
+    case MysqlTypes.BLOB:
+    case MysqlTypes.GEOMETRY:
+    case MysqlTypes.BIT: {
+      const [length, consumed] = readLengthEncodedInteger(buffer, offset);
+      const start = offset + consumed;
+      const end = start + length;
+      const slice = buffer.subarray(start, end);
+      let value = slice.toString("utf8");
+      if (
+        type === MysqlTypes.TINY_BLOB ||
+        type === MysqlTypes.MEDIUM_BLOB ||
+        type === MysqlTypes.LONG_BLOB ||
+        type === MysqlTypes.BLOB ||
+        type === MysqlTypes.GEOMETRY ||
+        type === MysqlTypes.BIT
+      ) {
+        value = Buffer.from(slice);
+      } else if (type === MysqlTypes.JSON) {
+        value = slice.toString("utf8");
+      }
+      return [value, consumed + length];
+    }
+    default: {
+      const [length, consumed] = readLengthEncodedInteger(buffer, offset);
+      const start = offset + consumed;
+      const end = start + length;
+      const slice = buffer.subarray(start, end);
+      return [slice.toString("utf8"), consumed + length];
+    }
+  }
+}
+
+async function runSelectQuery(databaseName, sql, parameters = []) {
   const entry = getDatabaseEntry(databaseName);
   const normalizedSql = sql.trim().replace(/;+$/g, "");
   const statement = entry.db.prepare(normalizedSql.length > 0 ? normalizedSql : sql);
   const columnsMeta = typeof statement.columns === "function" ? statement.columns() : [];
   const columns = columnsMeta.length > 0 ? columnsMeta.map((column) => column.name) : [];
-  const rowsData = statement.all();
+  const rowsData = statement.all(...parameters);
   const resolvedColumns = columns.length > 0 && rowsData.length > 0
     ? columns
     : rowsData.length > 0
@@ -276,12 +531,12 @@ async function runSelectQuery(databaseName, sql) {
   };
 }
 
-async function runNonSelectQuery(databaseName, sql) {
+async function runNonSelectQuery(databaseName, sql, parameters = []) {
   const entry = getDatabaseEntry(databaseName);
   const normalizedSql = sql.trim().replace(/;+$/g, "");
   const statement = entry.db.prepare(normalizedSql.length > 0 ? normalizedSql : sql);
   let affectedRows = 0;
-  const result = statement.run();
+  const result = statement.run(...parameters);
   if (typeof result.changes === "number") {
     affectedRows = result.changes;
   }
@@ -358,9 +613,10 @@ function sendHandshake(connection) {
   connection.state = "handshake";
 }
 
-async function sendResultSet(sequenceStart, connection, columns, rows, meta = {}) {
+async function sendResultSet(sequenceStart, connection, columns, rows, meta = {}, options = {}) {
   const packets = [];
   let sequenceId = sequenceStart;
+  const binary = options.binary === true;
   packets.push(buildPacket(sequenceId, writeLengthEncodedInteger(columns.length)));
   sequenceId += 1;
   for (const columnName of columns) {
@@ -376,7 +632,11 @@ async function sendResultSet(sequenceStart, connection, columns, rows, meta = {}
   packets.push(buildEofPacket(sequenceId, {}));
   sequenceId += 1;
   for (const row of rows) {
-    packets.push(buildRowPacket(sequenceId, row));
+    if (binary) {
+      packets.push(buildBinaryRowPacket(sequenceId, row, columns.length));
+    } else {
+      packets.push(buildRowPacket(sequenceId, row));
+    }
     sequenceId += 1;
   }
   packets.push(buildEofPacket(sequenceId, {}));
@@ -451,7 +711,7 @@ async function handleUseDatabase(sequenceId, connection, databaseName) {
   return [buildOkPacket(sequenceId, { message: `Using database ${databaseName}` })];
 }
 
-async function handleQuery(sequenceId, connection, sql) {
+async function executeSql(sequenceId, connection, sql, parameters = [], options = {}) {
   const trimmed = sql.trim();
   if (trimmed.length === 0) {
     return [buildOkPacket(sequenceId, {})];
@@ -482,8 +742,8 @@ async function handleQuery(sequenceId, connection, sql) {
 
   try {
     if (upper.startsWith("SELECT")) {
-      const result = await runSelectQuery(targetDatabase, trimmed);
-      return sendResultSet(sequenceId, connection, result.columns, result.rows);
+      const result = await runSelectQuery(targetDatabase, trimmed, parameters);
+      return sendResultSet(sequenceId, connection, result.columns, result.rows, {}, options);
     }
 
     if (upper.startsWith("CREATE DATABASE")) {
@@ -498,7 +758,7 @@ async function handleQuery(sequenceId, connection, sql) {
       upper.startsWith("UPDATE") ||
       upper.startsWith("DELETE")
     ) {
-      const { affectedRows } = await runNonSelectQuery(targetDatabase, trimmed);
+      const { affectedRows } = await runNonSelectQuery(targetDatabase, trimmed, parameters);
       return [buildOkPacket(sequenceId, { affectedRows })];
     }
 
@@ -506,6 +766,167 @@ async function handleQuery(sequenceId, connection, sql) {
   } catch (error) {
     return [buildErrPacket(sequenceId, { message: error.message })];
   }
+}
+
+async function handleQuery(sequenceId, connection, sql) {
+  return executeSql(sequenceId, connection, sql, []);
+}
+
+async function handlePreparedStatementPrepare(sequenceId, connection, sql) {
+  const trimmed = sql.trim();
+  if (trimmed.length === 0) {
+    return [buildErrPacket(sequenceId, { message: "Empty statement" })];
+  }
+
+  try {
+    const statementId = connection.nextStatementId;
+    connection.nextStatementId += 1;
+    const paramCount = countStatementParameters(trimmed);
+    const statement = {
+      id: statementId,
+      sql: trimmed,
+      paramCount,
+      paramTypes: paramCount > 0 ? new Array(paramCount).fill(null) : [],
+      columnNames: [],
+    };
+    connection.preparedStatements.set(statementId, statement);
+
+    let numColumns = 0;
+    const packets = [];
+    let sequence = sequenceId;
+
+    if (paramCount === 0 && /^\s*SELECT/i.test(trimmed)) {
+      try {
+        const targetDatabase = connection.currentDatabase || "default";
+        const result = await runSelectQuery(targetDatabase, trimmed, []);
+        statement.columnNames = result.columns;
+        numColumns = result.columns.length;
+      } catch (error) {
+        numColumns = 0;
+      }
+    }
+
+    packets.push(
+      buildStmtPrepareOkPacket(sequence, {
+        statementId,
+        numColumns,
+        numParams: paramCount,
+        warnings: 0,
+      })
+    );
+    sequence += 1;
+
+    if (paramCount > 0) {
+      for (let index = 0; index < paramCount; index += 1) {
+        packets.push(
+          buildColumnDefinitionPacket(sequence, {
+            schema: connection.currentDatabase || "",
+            table: "",
+            name: `param${index + 1}`,
+          })
+        );
+        sequence += 1;
+      }
+      packets.push(buildEofPacket(sequence, {}));
+      sequence += 1;
+    }
+
+    if (numColumns > 0) {
+      const columnNames = statement.columnNames.length > 0
+        ? statement.columnNames
+        : Array.from({ length: numColumns }, (_, index) => `column${index + 1}`);
+      for (const columnName of columnNames) {
+        packets.push(
+          buildColumnDefinitionPacket(sequence, {
+            schema: connection.currentDatabase || "",
+            table: "",
+            name: columnName,
+          })
+        );
+        sequence += 1;
+      }
+      packets.push(buildEofPacket(sequence, {}));
+    }
+
+    return packets;
+  } catch (error) {
+    return [buildErrPacket(sequenceId, { message: error.message })];
+  }
+}
+
+async function handlePreparedStatementExecute(sequenceId, connection, payload) {
+  if (payload.length < 5) {
+    return [buildErrPacket(sequenceId, { message: "Malformed execute command" })];
+  }
+
+  try {
+    const statementId = payload.readUInt32LE(1);
+    const statement = connection.preparedStatements.get(statementId);
+    if (!statement) {
+      return [buildErrPacket(sequenceId, { message: `Unknown statement ${statementId}` })];
+    }
+
+    const paramCount = statement.paramCount;
+    let offset = 5; // command byte already consumed, statement id read
+    offset += 1; // flags
+    offset += 4; // iteration count
+
+    const values = [];
+    if (paramCount > 0) {
+      const nullBitmapLength = Math.ceil(paramCount / 8);
+      const nullBitmap = payload.subarray(offset, offset + nullBitmapLength);
+      offset += nullBitmapLength;
+
+      const newParamsBoundFlag = payload[offset];
+      offset += 1;
+
+      if (newParamsBoundFlag) {
+        statement.paramTypes = Array.from({ length: paramCount }, () => ({ type: MysqlTypes.VAR_STRING, unsigned: false }));
+        for (let index = 0; index < paramCount; index += 1) {
+          const type = payload[offset];
+          const flags = payload[offset + 1];
+          statement.paramTypes[index] = {
+            type,
+            unsigned: (flags & 0x80) !== 0,
+          };
+          offset += 2;
+        }
+      } else if (
+        !Array.isArray(statement.paramTypes) ||
+        statement.paramTypes.length !== paramCount ||
+        statement.paramTypes.some((entry) => !entry || typeof entry.type !== "number")
+      ) {
+        statement.paramTypes = Array.from({ length: paramCount }, () => ({ type: MysqlTypes.VAR_STRING, unsigned: false }));
+      }
+
+      const paramTypes = statement.paramTypes || [];
+      for (let index = 0; index < paramCount; index += 1) {
+        const bitmapByte = nullBitmap[Math.floor(index / 8)] || 0;
+        const isNull = ((bitmapByte >> (index % 8)) & 0x01) === 1;
+        if (isNull) {
+          values.push(null);
+          continue;
+        }
+
+        const typeInfo = paramTypes[index] || { type: MysqlTypes.VAR_STRING, unsigned: false };
+        const [value, consumed] = parseBinaryParameterValue(payload, offset, typeInfo.type, typeInfo.unsigned);
+        offset += consumed;
+        values.push(value);
+      }
+    }
+
+    return executeSql(sequenceId, connection, statement.sql, values, { binary: true });
+  } catch (error) {
+    return [buildErrPacket(sequenceId, { message: error.message })];
+  }
+}
+
+function handlePreparedStatementClose(connection, payload) {
+  if (payload.length < 5) {
+    return;
+  }
+  const statementId = payload.readUInt32LE(1);
+  connection.preparedStatements.delete(statementId);
 }
 
 function createConnectionHandler(serverState) {
@@ -517,6 +938,8 @@ function createConnectionHandler(serverState) {
       state: "initial",
       currentDatabase: null,
       username: "",
+      preparedStatements: new Map(),
+      nextStatementId: 1,
     };
 
     sendHandshake(connection);
@@ -572,6 +995,20 @@ function handleCommand(connection, payload, sequenceId) {
       handleQuery(1, connection, sqlString).then((packets) => {
         sendPackets(connection.socket, packets);
       });
+      break;
+    case MYSQL_COMMAND_STMT_PREPARE:
+      handlePreparedStatementPrepare(1, connection, sqlString).then((packets) => {
+        sendPackets(connection.socket, packets);
+      });
+      break;
+    case MYSQL_COMMAND_STMT_EXECUTE:
+      state.queryCount += 1;
+      handlePreparedStatementExecute(1, connection, payload).then((packets) => {
+        sendPackets(connection.socket, packets);
+      });
+      break;
+    case MYSQL_COMMAND_STMT_CLOSE:
+      handlePreparedStatementClose(connection, payload);
       break;
     case 0x0e: // COM_PING
       connection.socket.write(buildOkPacket(1, { message: "Pong" }));
