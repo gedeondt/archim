@@ -42,8 +42,8 @@ MySQL como CRM persistente.
     y ofrece `/api/billing/customers` y `/api/billing/contracts`.
   - `services/billing-dashboard/microfront/BillingDashboard.microfrontend`: panel web para explorar
     la información de facturación.
-  - La carpeta `lib/utility` contiene utilidades compartidas, como el cliente ligero para publicar y
-    leer eventos del log.
+  - La carpeta `lib/` dentro de la arquitectura contiene utilidades compartidas, como el cliente
+    ligero para publicar y leer eventos del log.
 
 ## Puesta en marcha manual
 

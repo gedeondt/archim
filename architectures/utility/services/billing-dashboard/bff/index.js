@@ -6,7 +6,7 @@ const http = require("node:http");
 const { URL } = require("node:url");
 const mysql = require("mysql2/promise");
 
-const { createEventLogClient } = require("../../../../../lib/utility/event-log-client");
+const { createEventLogClient } = require("../../../lib/event-log-client");
 
 const DEFAULT_MICROFRONT_PATH = path.join(
   __dirname,
@@ -16,8 +16,22 @@ const DEFAULT_MICROFRONT_PATH = path.join(
 let cachedMicrofront = null;
 let cachedMicrofrontPath = null;
 
+function resolveMicrofrontPath(providedPath) {
+  if (!providedPath) {
+    return DEFAULT_MICROFRONT_PATH;
+  }
+  if (path.isAbsolute(providedPath)) {
+    return providedPath;
+  }
+  const fromCwd = path.resolve(process.cwd(), providedPath);
+  if (fs.existsSync(fromCwd)) {
+    return fromCwd;
+  }
+  return path.resolve(__dirname, providedPath);
+}
+
 function loadMicrofrontScript(customPath) {
-  const scriptPath = customPath || DEFAULT_MICROFRONT_PATH;
+  const scriptPath = resolveMicrofrontPath(customPath);
   if (!cachedMicrofront || cachedMicrofrontPath !== scriptPath) {
     cachedMicrofront = fs.readFileSync(scriptPath, "utf8");
     cachedMicrofrontPath = scriptPath;

@@ -19,8 +19,22 @@ const TARIFFS = {
 
 let cachedMicrofront = null;
 
+function resolveMicrofrontPath(providedPath) {
+  if (!providedPath) {
+    return DEFAULT_MICROFRONT_PATH;
+  }
+  if (path.isAbsolute(providedPath)) {
+    return providedPath;
+  }
+  const fromCwd = path.resolve(process.cwd(), providedPath);
+  if (fs.existsSync(fromCwd)) {
+    return fromCwd;
+  }
+  return path.resolve(__dirname, providedPath);
+}
+
 function loadMicrofrontScript(customPath) {
-  const scriptPath = customPath || DEFAULT_MICROFRONT_PATH;
+  const scriptPath = resolveMicrofrontPath(customPath);
   if (!cachedMicrofront || loadMicrofrontScript.lastPath !== scriptPath) {
     cachedMicrofront = fs.readFileSync(scriptPath, "utf8");
     loadMicrofrontScript.lastPath = scriptPath;
