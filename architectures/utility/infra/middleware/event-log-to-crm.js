@@ -81,36 +81,133 @@ function ensureOrderPayload(eventEntry) {
   return payload;
 }
 
-async function persistOrder(connection, order, recordedAt) {
-  const customer = order.customer || {};
-  const supplyPoint = order.supplyPoint || {};
-  const contract = order.contract || {};
+function sanitizeText(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  return value.trim();
+}
 
-  const createdAt = order.createdAt || recordedAt;
-  const customerResult = await connection.execute(
+async function getFirstRow(connection, query, params) {
+  const [rows] = await connection.execute(query, params);
+  if (Array.isArray(rows) && rows.length > 0) {
+    return rows[0];
+  }
+  return null;
+}
+
+async function ensureCustomer(connection, customer, createdAt) {
+  const firstName = sanitizeText(customer.firstName);
+  const lastName = sanitizeText(customer.lastName);
+  const dni = sanitizeText(customer.dni);
+
+  if (dni) {
+    const existing = await getFirstRow(connection, "SELECT id FROM customers WHERE dni = ? LIMIT 1", [dni]);
+    if (existing && typeof existing.id === "number") {
+      return existing.id;
+    }
+  }
+
+  const [result] = await connection.execute(
     "INSERT INTO customers (first_name, last_name, dni, created_at) VALUES (?, ?, ?, ?)",
-    [customer.firstName || "", customer.lastName || "", customer.dni || "", createdAt]
+    [firstName, lastName, dni, createdAt]
   );
-  const customerId = customerResult[0].insertId;
 
-  const supplyResult = await connection.execute(
+  if (result && typeof result.insertId === "number" && result.insertId > 0) {
+    return result.insertId;
+  }
+
+  const fallbackQuery = dni
+    ? "SELECT id FROM customers WHERE dni = ? ORDER BY id DESC LIMIT 1"
+    : "SELECT id FROM customers WHERE first_name = ? AND last_name = ? AND created_at = ? ORDER BY id DESC LIMIT 1";
+  const fallbackParams = dni ? [dni] : [firstName, lastName, createdAt];
+  const fallback = await getFirstRow(connection, fallbackQuery, fallbackParams);
+  if (fallback && typeof fallback.id === "number") {
+    return fallback.id;
+  }
+
+  throw new Error("No se pudo determinar el cliente persistido");
+}
+
+async function ensureSupplyPoint(connection, customerId, supplyPoint, createdAt) {
+  const address = sanitizeText(supplyPoint.address);
+  const cups = sanitizeText(supplyPoint.cups);
+
+  if (cups) {
+    const existing = await getFirstRow(
+      connection,
+      "SELECT id, customer_id, address FROM supply_points WHERE cups = ? LIMIT 1",
+      [cups]
+    );
+    if (existing && typeof existing.id === "number") {
+      if (existing.customer_id !== customerId || sanitizeText(existing.address) !== address) {
+        await connection.execute(
+          "UPDATE supply_points SET customer_id = ?, address = ?, created_at = ? WHERE id = ?",
+          [customerId, address, createdAt, existing.id]
+        );
+      }
+      return existing.id;
+    }
+  }
+
+  const [result] = await connection.execute(
     "INSERT INTO supply_points (customer_id, address, cups, created_at) VALUES (?, ?, ?, ?)",
-    [customerId, supplyPoint.address || "", supplyPoint.cups || "", createdAt]
+    [customerId, address, cups, createdAt]
   );
-  const supplyPointId = supplyResult[0].insertId;
+
+  if (result && typeof result.insertId === "number" && result.insertId > 0) {
+    return result.insertId;
+  }
+
+  const fallback = await getFirstRow(
+    connection,
+    "SELECT id FROM supply_points WHERE cups = ? ORDER BY id DESC LIMIT 1",
+    [cups]
+  );
+  if (fallback && typeof fallback.id === "number") {
+    return fallback.id;
+  }
+
+  throw new Error("No se pudo determinar el punto de suministro persistido");
+}
+
+async function upsertContract(connection, supplyPointId, order, recordedAt) {
+  const contract = order.contract || {};
+  const orderId = order.orderId || `order-${Date.now()}`;
+  const rawTariffCode = sanitizeText(contract.tariffCode);
+  const tariffCode = rawTariffCode || "unknown";
+  const tariffName = sanitizeText(contract.tariffName) || rawTariffCode || "Sin nombre";
+  const status = sanitizeText(contract.status) || "pending";
+  const rawPayload = JSON.stringify(order);
+
+  const existing = await getFirstRow(
+    connection,
+    "SELECT id FROM contracts WHERE order_id = ? LIMIT 1",
+    [orderId]
+  );
+
+  if (existing && typeof existing.id === "number") {
+    await connection.execute(
+      "UPDATE contracts SET supply_point_id = ?, tariff_code = ?, tariff_name = ?, status = ?, recorded_at = ?, raw_payload = ? WHERE id = ?",
+      [supplyPointId, tariffCode, tariffName, status, recordedAt, rawPayload, existing.id]
+    );
+    return;
+  }
 
   await connection.execute(
     "INSERT INTO contracts (supply_point_id, order_id, tariff_code, tariff_name, status, recorded_at, raw_payload) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    [
-      supplyPointId,
-      order.orderId || `order-${Date.now()}`,
-      contract.tariffCode || "unknown",
-      contract.tariffName || contract.tariffCode || "Sin nombre",
-      contract.status || "pending",
-      recordedAt,
-      JSON.stringify(order),
-    ]
+    [supplyPointId, orderId, tariffCode, tariffName, status, recordedAt, rawPayload]
   );
+}
+
+async function persistOrder(connection, order, recordedAt) {
+  const customer = order.customer || {};
+  const supplyPoint = order.supplyPoint || {};
+
+  const createdAt = order.createdAt || recordedAt;
+  const customerId = await ensureCustomer(connection, customer, createdAt);
+  const supplyPointId = await ensureSupplyPoint(connection, customerId, supplyPoint, createdAt);
+  await upsertContract(connection, supplyPointId, order, recordedAt);
 }
 
 async function processEvents(connection, events, state) {
