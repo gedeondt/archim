@@ -36,6 +36,8 @@ architectures/
 - `manifest.json` expone un arreglo de pasos. Cada paso define `phase` y `script`, además de la
   configuración que se pasará al script (`options`). El `launcher` puede recibir la ruta al
   manifiesto mediante `--config` para activar automáticamente la arquitectura.
+- Opcionalmente, el manifiesto puede documentar un bloque `design` con la vista funcional y los
+  servicios que participan en cada dominio.
 - Los artefactos de `init/` describen el estado inicial de los simuladores (bases de datos, colas,
   tablas, etc.).
 - `infra/` alberga scripts que actúan como middleware: escuchan eventos, coordinan colas y persisten
@@ -121,6 +123,55 @@ architectures/
 - `logs-to-redis-s3.js` procesa los logs generados por `queue-to-store.js`, guarda en Redis la última
   marca de tiempo procesada (`SET test:lastProcessed ...`) y genera un archivo con texto aleatorio en
   el simulador de S3 para cada lote procesado.
+
+#### Bloque `design` (opcional)
+
+El objeto `design` agrega contexto arquitectónico sin afectar la ejecución del `launcher`. Cada
+clave representa un dominio funcional y su valor contiene:
+
+- `name`: etiqueta legible para el dominio.
+- `services`: arreglo de componentes asociados al dominio.
+  - `name`: nombre del servicio o activo.
+  - `type`: clasificación del servicio (`frontend`, `bff`, `database`, `event-bus`, `integration`,
+    etc.). Usa esta propiedad para homogeneizar el diagrama lógico que muestre el manifiesto.
+  - `integrates` (solo para servicios `integration`): lista de dominios que conecta, identificados
+    por sus claves dentro de `design`.
+
+Ejemplo tomado de la arquitectura `utility`:
+
+```json
+{
+  "design": {
+    "sales": {
+      "name": "Sales",
+      "services": [
+        { "name": "Utility Ecommerce Form", "type": "frontend" },
+        { "name": "Utility Ecommerce BFF", "type": "bff" }
+      ]
+    },
+    "integrations": {
+      "name": "Integrations",
+      "services": [
+        { "name": "Event Log", "type": "event-bus" },
+        {
+          "name": "Event Log to CRM Worker",
+          "type": "integration",
+          "integrates": ["sales", "customer_care"]
+        }
+      ]
+    },
+    "customer_care": {
+      "name": "Customer Care",
+      "services": [
+        { "name": "CRM Database", "type": "database" }
+      ]
+    }
+  }
+}
+```
+
+Si no se necesita documentación adicional, el bloque `design` puede omitirse por completo del
+manifiesto.
 
 #### Manifiesto ilustrativo
 
