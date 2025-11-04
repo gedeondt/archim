@@ -90,7 +90,16 @@ function isNonEmptyArray(value) {
   return Array.isArray(value) && value.length > 0;
 }
 
-function createDashboardConfig(widgetsOption) {
+function isNonEmptyObject(value) {
+  return (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).length > 0
+  );
+}
+
+function createDashboardConfig(widgetsOption, architectureDesign) {
   let moduleWidgets = DEFAULT_MODULE_WIDGETS;
   let architectureWidgets = [];
 
@@ -112,6 +121,9 @@ function createDashboardConfig(widgetsOption) {
     widgets: moduleWidgets,
     moduleWidgets,
     architectureWidgets,
+    architectureDesign: isNonEmptyObject(architectureDesign)
+      ? architectureDesign
+      : null,
   };
 }
 
@@ -144,7 +156,7 @@ function sanitizeModuleName(moduleName = "") {
   return trimmed;
 }
 
-function start({ port = 4300, widgets } = {}) {
+function start({ port = 4300, widgets, architectureDesign } = {}) {
   return new Promise(async (resolve, reject) => {
     try {
       await ensurePublicFiles();
@@ -153,7 +165,7 @@ function start({ port = 4300, widgets } = {}) {
       return;
     }
 
-    const dashboardConfig = createDashboardConfig(widgets);
+    const dashboardConfig = createDashboardConfig(widgets, architectureDesign);
     const server = http.createServer(async (request, response) => {
       const { url: requestUrl = "/" } = request;
       const parsedUrl = new URL(requestUrl, "http://localhost");

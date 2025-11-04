@@ -1,6 +1,13 @@
 import React, { useEffect, useState, useRef, useMemo } from "https://esm.sh/react@18";
 import { createRoot } from "https://esm.sh/react-dom@18/client";
 import { marked } from "https://esm.sh/marked@12";
+import ReactFlow, {
+  Background,
+  Controls,
+  MarkerType,
+  useEdgesState,
+  useNodesState,
+} from "https://esm.sh/reactflow@11?bundle";
 
 marked.setOptions({
   breaks: true,
@@ -10,6 +17,138 @@ marked.setOptions({
 });
 
 const { createElement } = React;
+
+const REACT_FLOW_STYLESHEET_URL = "https://esm.sh/reactflow@11/dist/style.css";
+const ARCHITECTURE_STYLES_ID = "architecture-design-styles";
+const ARCHITECTURE_DESIGN_HEIGHT = 360;
+
+const ARCHITECTURE_STYLES = `
+.architecture-design-wrapper {
+  margin-bottom: 1.5rem;
+}
+
+.architecture-design-card {
+  overflow: hidden;
+}
+
+.architecture-design-card .card-header {
+  background-color: var(--bs-body-bg, #ffffff);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  font-weight: 600;
+}
+
+.architecture-design-diagram {
+  height: ${ARCHITECTURE_DESIGN_HEIGHT}px;
+}
+
+.react-flow__node-domainNode {
+  padding: 0;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+}
+
+.domain-node {
+  background-color: var(--bs-tertiary-bg, #f8f9fa);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 16px;
+  color: var(--bs-body-color, #212529);
+  font-family: inherit;
+}
+
+.domain-node__title {
+  font-weight: 600;
+  font-size: 1rem;
+  margin-bottom: 8px;
+}
+
+.domain-node__services {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.domain-node__service {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bs-body-bg, #ffffff);
+  border-radius: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.domain-node__service-name {
+  font-weight: 500;
+}
+
+.domain-node__service-type {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--bs-secondary-color, #6c757d);
+  margin-top: 4px;
+}
+
+.domain-node__empty {
+  font-size: 0.875rem;
+  color: var(--bs-secondary-color, #6c757d);
+}
+
+.react-flow__controls {
+  box-shadow: none;
+  border-radius: 8px;
+}
+
+.react-flow__attribution {
+  display: none;
+}
+`;
+
+function ensureStylesheet(href) {
+  if (typeof document === "undefined") {
+    return;
+  }
+  const existing = document.querySelector(`link[data-href='${href}']`);
+  if (existing) {
+    return;
+  }
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = href;
+  link.dataset.href = href;
+  document.head.appendChild(link);
+}
+
+function ensureArchitectureStyles() {
+  if (typeof document === "undefined") {
+    return;
+  }
+  if (document.getElementById(ARCHITECTURE_STYLES_ID)) {
+    return;
+  }
+  const style = document.createElement("style");
+  style.id = ARCHITECTURE_STYLES_ID;
+  style.textContent = ARCHITECTURE_STYLES;
+  document.head.appendChild(style);
+}
+
+if (typeof document !== "undefined") {
+  ensureStylesheet(REACT_FLOW_STYLESHEET_URL);
+  ensureArchitectureStyles();
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function hasArchitectureDesign(design) {
+  return isPlainObject(design) && Object.keys(design).length > 0;
+}
 
 const DEFAULT_MODULE_WIDGETS = [
   {
@@ -54,7 +193,15 @@ const DEFAULT_MODULE_WIDGETS = [
 const DEFAULT_DASHBOARD_CONFIG = {
   moduleWidgets: DEFAULT_MODULE_WIDGETS,
   architectureWidgets: [],
+  architectureDesign: null,
 };
+
+function normalizeArchitectureDesign(design) {
+  if (!hasArchitectureDesign(design)) {
+    return null;
+  }
+  return design;
+}
 
 function normalizeDashboardConfig(config) {
   const source = config && typeof config === "object" ? config : {};
@@ -70,6 +217,11 @@ function normalizeDashboardConfig(config) {
       ? source.architecture
       : [];
 
+  let architectureDesign = normalizeArchitectureDesign(source.architectureDesign);
+  if (!architectureDesign && source.design) {
+    architectureDesign = normalizeArchitectureDesign(source.design);
+  }
+
   return {
     moduleWidgets:
       Array.isArray(moduleWidgetsSource) && moduleWidgetsSource.length > 0
@@ -78,7 +230,174 @@ function normalizeDashboardConfig(config) {
     architectureWidgets: Array.isArray(architectureWidgetsSource)
       ? architectureWidgetsSource
       : [],
+    architectureDesign,
   };
+}
+
+const DOMAIN_COLUMN_WIDTH = 320;
+const DOMAIN_ROW_HEIGHT = 230;
+
+function createArchitectureGraph(design) {
+  if (!hasArchitectureDesign(design)) {
+    return { nodes: [], edges: [] };
+  }
+
+  const domainEntries = Object.entries(design);
+  if (domainEntries.length === 0) {
+    return { nodes: [], edges: [] };
+  }
+
+  const columnCount = Math.max(1, Math.ceil(Math.sqrt(domainEntries.length)));
+  const nodes = [];
+  const edges = [];
+  let edgeIdCounter = 0;
+
+  domainEntries.forEach(([domainKey, domainValue], index) => {
+    const column = index % columnCount;
+    const row = Math.floor(index / columnCount);
+    const services = Array.isArray(domainValue?.services)
+      ? domainValue.services
+      : [];
+
+    nodes.push({
+      id: domainKey,
+      type: "domainNode",
+      position: {
+        x: column * DOMAIN_COLUMN_WIDTH,
+        y: row * DOMAIN_ROW_HEIGHT,
+      },
+      data: {
+        label: domainValue?.name || domainKey,
+        services,
+      },
+      draggable: false,
+      selectable: false,
+    });
+
+    services.forEach((service, serviceIndex) => {
+      if (
+        !service ||
+        typeof service !== "object" ||
+        service.type !== "integration" ||
+        !Array.isArray(service.integrates)
+      ) {
+        return;
+      }
+      service.integrates.forEach((targetKey) => {
+        if (!design[targetKey]) {
+          return;
+        }
+        const edgeId = `${domainKey}-${targetKey}-${serviceIndex}-${edgeIdCounter}`;
+        edgeIdCounter += 1;
+        edges.push({
+          id: edgeId,
+          source: domainKey,
+          target: targetKey,
+          label: service.name || "Integración",
+          type: "smoothstep",
+          markerEnd: { type: MarkerType.ArrowClosed },
+          animated: false,
+          labelBgPadding: [6, 4],
+          labelBgBorderRadius: 4,
+          labelStyle: { fontSize: 12 },
+        });
+      });
+    });
+  });
+
+  return { nodes, edges };
+}
+
+function DomainNode({ data }) {
+  const label = data?.label || "Dominio";
+  const services = Array.isArray(data?.services) ? data.services : [];
+
+  return createElement(
+    "div",
+    { className: "domain-node" },
+    createElement("div", { className: "domain-node__title" }, label),
+    services.length > 0
+      ? createElement(
+          "ul",
+          { className: "domain-node__services" },
+          services.map((service, index) =>
+            createElement(
+              "li",
+              {
+                key: `${service?.name || "service"}-${index}`,
+                className: "domain-node__service",
+              },
+              createElement(
+                "span",
+                { className: "domain-node__service-name" },
+                service?.name || `Servicio ${index + 1}`,
+              ),
+              service?.type
+                ? createElement(
+                    "span",
+                    { className: "domain-node__service-type" },
+                    service.type,
+                  )
+                : null,
+            ),
+          ),
+        )
+      : createElement(
+          "div",
+          { className: "domain-node__empty" },
+          "Sin servicios documentados",
+        ),
+  );
+}
+
+function ArchitectureDesignDiagram({ design }) {
+  const graph = useMemo(() => createArchitectureGraph(design), [design]);
+  const [nodes, setNodes, onNodesChange] = useNodesState(graph.nodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(graph.edges);
+  const nodeTypes = useMemo(() => ({ domainNode: DomainNode }), []);
+
+  useEffect(() => {
+    setNodes(graph.nodes);
+    setEdges(graph.edges);
+  }, [graph, setNodes, setEdges]);
+
+  if (graph.nodes.length === 0) {
+    return createElement(
+      "div",
+      {
+        className: "alert alert-light border text-center text-secondary mb-0",
+      },
+      "No hay un diseño de arquitectura disponible.",
+    );
+  }
+
+  return createElement(
+    "div",
+    { className: "architecture-design-diagram" },
+    createElement(
+      ReactFlow,
+      {
+        nodes,
+        edges,
+        nodeTypes,
+        fitView: true,
+        fitViewOptions: { padding: 0.2, includeHiddenNodes: true },
+        nodesConnectable: false,
+        nodesDraggable: false,
+        elementsSelectable: false,
+        zoomOnScroll: false,
+        zoomOnPinch: false,
+        zoomOnDoubleClick: false,
+        panOnDrag: true,
+        panOnScroll: true,
+        proOptions: { hideAttribution: true },
+        onNodesChange,
+        onEdgesChange,
+      },
+      createElement(Background, { gap: 20, size: 1 }),
+      createElement(Controls, { showInteractive: false }),
+    ),
+  );
 }
 
 function loadMicrofrontendScript(url) {
@@ -414,7 +733,8 @@ function TabNavigation({ activeTab, onSelect, moduleCount, architectureCount }) 
 
 export function DashboardApp({ initialConfig = DEFAULT_DASHBOARD_CONFIG }) {
   const [activeTab, setActiveTab] = useState("modules");
-  const { moduleWidgets, architectureWidgets } = useDashboardConfig(initialConfig);
+  const { moduleWidgets, architectureWidgets, architectureDesign } =
+    useDashboardConfig(initialConfig);
 
   useEffect(() => {
     if (
@@ -439,6 +759,8 @@ export function DashboardApp({ initialConfig = DEFAULT_DASHBOARD_CONFIG }) {
   };
 
   const hasWidgets = activeWidgets.length > 0;
+  const showArchitectureDesign =
+    activeTab === "architecture" && hasArchitectureDesign(architectureDesign);
 
   return createElement(
     React.Fragment,
@@ -449,6 +771,28 @@ export function DashboardApp({ initialConfig = DEFAULT_DASHBOARD_CONFIG }) {
       moduleCount: tabs.modules.length,
       architectureCount: tabs.architecture.length,
     }),
+    showArchitectureDesign
+      ? createElement(
+          "div",
+          { className: "architecture-design-wrapper" },
+          createElement(
+            "div",
+            { className: "card architecture-design-card" },
+            createElement(
+              "div",
+              { className: "card-header" },
+              "Diseño de la arquitectura",
+            ),
+            createElement(
+              "div",
+              { className: "card-body" },
+              createElement(ArchitectureDesignDiagram, {
+                design: architectureDesign,
+              }),
+            ),
+          ),
+        )
+      : null,
     createElement(
       "div",
       { className: "row g-4" },
@@ -493,6 +837,7 @@ export function bootstrapDashboard(domNode, options = {}) {
           : Array.isArray(options.architecture)
             ? options.architecture
             : [],
+        architectureDesign: options.architectureDesign,
       }),
     })
   );

@@ -59,6 +59,18 @@ async function run({ baseUrl, port } = {}) {
     const architectureWidgets = Array.isArray(config.architectureWidgets)
       ? config.architectureWidgets
       : [];
+    const architectureDesign =
+      config.architectureDesign === null || config.architectureDesign === undefined
+        ? null
+        : config.architectureDesign;
+
+    if (architectureDesign !== null) {
+      assert.equal(
+        typeof architectureDesign,
+        "object",
+        "El diseño de arquitectura debe ser un objeto o null",
+      );
+    }
 
     for (const widget of config.moduleWidgets) {
       assert.ok(widget.id, "Cada widget debe tener id");
