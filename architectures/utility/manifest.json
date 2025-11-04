@@ -21,7 +21,9 @@
     "customer_care": {
       "name": "Customer Care",
       "services": [
-        { "name": "CRM Database", "type": "database" }
+        { "name": "CRM Database", "type": "database" },
+        { "name": "Utility CRM Dashboard", "type": "frontend" },
+        { "name": "Utility CRM Dashboard BFF", "type": "bff" }
       ]
     }
   },
@@ -53,6 +55,16 @@
                   "tagName": "event-log-monitor",
                   "props": {
                     "metrics-url": "http://localhost:4400/metrics"
+                  }
+                },
+                {
+                  "id": "utility-crm-dashboard",
+                  "title": "Clientes y contratos CRM",
+                  "url": "http://localhost:5900/microfront/crm-dashboard.js",
+                  "tagName": "utility-crm-dashboard",
+                  "props": {
+                    "api-base-url": "http://localhost:5900",
+                    "page-size": 5
                   }
                 }
               ]
@@ -109,6 +121,22 @@
           "options": {
             "eventLogUrl": "http://localhost:4400/event-log/queues/ecommerce/events",
             "microfrontPath": "./architectures/utility/services/ecommerce/microfront/EcommerceForm.microfrontend"
+          }
+        },
+        {
+          "module": "./architectures/utility/services/crm-dashboard/bff/index.js",
+          "port": 5900,
+          "options": {
+            "mysql": {
+              "host": "localhost",
+              "port": 3307,
+              "user": "root",
+              "password": "",
+              "database": "crm"
+            },
+            "microfrontPath": "./architectures/utility/services/crm-dashboard/microfront/CrmDashboard.microfrontend",
+            "pageSize": 5,
+            "maxPageSize": 25
           }
         }
       ]

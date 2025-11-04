@@ -1,0 +1,373 @@
+class UtilityCrmDashboard extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: "open" });
+    this.state = {
+      activeTab: "customers",
+      customers: { items: [], page: 1, totalPages: 0, total: 0, loading: false },
+      contracts: { items: [], page: 1, totalPages: 0, total: 0, loading: false },
+      error: null,
+    };
+    this.handleTabClick = this.handleTabClick.bind(this);
+    this.handlePaginationClick = this.handlePaginationClick.bind(this);
+  }
+
+  connectedCallback() {
+    this.render();
+    this.loadResource("customers", 1);
+  }
+
+  static get observedAttributes() {
+    return ["api-base-url", "page-size"];
+  }
+
+  attributeChangedCallback() {
+    // Refetch data when configuration changes.
+    this.state.customers = { items: [], page: 1, totalPages: 0, total: 0, loading: false };
+    this.state.contracts = { items: [], page: 1, totalPages: 0, total: 0, loading: false };
+    this.render();
+    this.loadResource(this.state.activeTab, 1);
+  }
+
+  get apiBaseUrl() {
+    return this.getAttribute("api-base-url") || "";
+  }
+
+  get pageSize() {
+    const value = Number.parseInt(this.getAttribute("page-size"), 10);
+    if (Number.isNaN(value) || value <= 0) {
+      return 5;
+    }
+    return value;
+  }
+
+  buildApiUrl(resource, page) {
+    const base = this.apiBaseUrl.replace(/\/$/, "");
+    const url = new URL(`/api/crm/${resource}`, base || window.location.origin);
+    url.searchParams.set("page", String(page));
+    url.searchParams.set("pageSize", String(this.pageSize));
+    return url.toString();
+  }
+
+  setLoading(resource, value) {
+    this.state[resource] = {
+      ...this.state[resource],
+      loading: value,
+    };
+  }
+
+  setData(resource, payload) {
+    this.state[resource] = {
+      items: payload.data || [],
+      page: payload.pagination?.page || 1,
+      totalPages: payload.pagination?.totalPages || 0,
+      total: payload.pagination?.total || 0,
+      loading: false,
+    };
+  }
+
+  setError(message) {
+    this.state.error = message;
+  }
+
+  clearError() {
+    this.state.error = null;
+  }
+
+  async loadResource(resource, page) {
+    this.setLoading(resource, true);
+    this.clearError();
+    this.render();
+    try {
+      const response = await fetch(this.buildApiUrl(resource, page));
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => ({}));
+        const message = errorPayload?.error || `HTTP ${response.status}`;
+        throw new Error(message);
+      }
+      const payload = await response.json();
+      this.setData(resource, payload);
+    } catch (error) {
+      this.setData(resource, { data: [], pagination: { page: 1, totalPages: 0, total: 0 } });
+      this.setError(`No se pudo cargar ${resource === "customers" ? "los clientes" : "los contratos"}: ${error.message}`);
+    }
+    this.render();
+  }
+
+  handleTabClick(event) {
+    const target = event.currentTarget;
+    const tab = target?.getAttribute("data-tab");
+    if (!tab || tab === this.state.activeTab) {
+      return;
+    }
+    this.state.activeTab = tab;
+    this.clearError();
+    this.render();
+    if (this.state[tab].items.length === 0 && !this.state[tab].loading) {
+      this.loadResource(tab, 1);
+    }
+  }
+
+  handlePaginationClick(event) {
+    const button = event.currentTarget;
+    const resource = button?.getAttribute("data-resource");
+    const direction = button?.getAttribute("data-direction");
+    if (!resource || !direction) {
+      return;
+    }
+    const current = this.state[resource];
+    if (current.loading) {
+      return;
+    }
+    const nextPage = direction === "next" ? current.page + 1 : current.page - 1;
+    if (nextPage < 1 || (current.totalPages > 0 && nextPage > current.totalPages)) {
+      return;
+    }
+    this.loadResource(resource, nextPage);
+  }
+
+  escapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  formatDate(value) {
+    if (!value) {
+      return "";
+    }
+    try {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return value;
+      }
+      return date.toLocaleString("es-ES", {
+        year: "numeric",
+        month: "short",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch (error) {
+      return value;
+    }
+  }
+
+  renderCustomers() {
+    const { items, page, totalPages, total, loading } = this.state.customers;
+    const rows =
+      items.length > 0
+        ? items
+            .map((item) => `
+              <tr>
+                <td>${this.escapeHtml(`${item.firstName} ${item.lastName}`.trim())}</td>
+                <td>${this.escapeHtml(item.dni)}</td>
+                <td>${this.escapeHtml(this.formatDate(item.createdAt))}</td>
+              </tr>
+            `)
+            .join("")
+        : `
+            <tr class="empty">
+              <td colspan="3">${loading ? "Cargando clientes..." : "Sin clientes registrados"}</td>
+            </tr>
+          `;
+
+    return {
+      header: `Clientes (${total})`,
+      columns: "<th>Nombre</th><th>DNI</th><th>Alta</th>",
+      rows,
+      pagination: { page, totalPages, resource: "customers" },
+    };
+  }
+
+  renderContracts() {
+    const { items, page, totalPages, total, loading } = this.state.contracts;
+    const rows =
+      items.length > 0
+        ? items
+            .map((item) => `
+              <tr>
+                <td>${this.escapeHtml(item.orderId)}</td>
+                <td>${this.escapeHtml(item.tariffName || item.tariffCode)}</td>
+                <td>${this.escapeHtml(item.status)}</td>
+                <td>${this.escapeHtml(item.customerName)}<br /><span class="secondary">${this.escapeHtml(item.customerDni)}</span></td>
+                <td>${this.escapeHtml(item.cups)}</td>
+                <td>${this.escapeHtml(this.formatDate(item.recordedAt))}</td>
+              </tr>
+            `)
+            .join("")
+        : `
+            <tr class="empty">
+              <td colspan="6">${loading ? "Cargando contratos..." : "Sin contratos registrados"}</td>
+            </tr>
+          `;
+
+    return {
+      header: `Contratos (${total})`,
+      columns: "<th>Pedido</th><th>Tarifa</th><th>Estado</th><th>Cliente</th><th>CUPS</th><th>Registrado</th>",
+      rows,
+      pagination: { page, totalPages, resource: "contracts" },
+    };
+  }
+
+  renderPagination(pagination) {
+    const { page, totalPages, resource } = pagination;
+    const disablePrev = page <= 1 ? "disabled" : "";
+    const disableNext = totalPages === 0 || page >= totalPages ? "disabled" : "";
+    return `
+      <div class="pagination">
+        <button type="button" data-resource="${resource}" data-direction="prev" ${disablePrev}>Anterior</button>
+        <span>Página ${page}${totalPages ? ` de ${totalPages}` : ""}</span>
+        <button type="button" data-resource="${resource}" data-direction="next" ${disableNext}>Siguiente</button>
+      </div>
+    `;
+  }
+
+  render() {
+    const activeTab = this.state.activeTab;
+    const view = activeTab === "customers" ? this.renderCustomers() : this.renderContracts();
+
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host {
+          display: block;
+          font-family: 'Segoe UI', system-ui, sans-serif;
+          color: #0f172a;
+          background: #ffffff;
+          border-radius: 12px;
+          border: 1px solid #e2e8f0;
+          padding: 0;
+          box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+          max-width: 920px;
+        }
+        header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 16px 20px;
+          border-bottom: 1px solid #e2e8f0;
+        }
+        h2 {
+          margin: 0;
+          font-size: 18px;
+        }
+        nav {
+          display: flex;
+          gap: 8px;
+        }
+        nav button {
+          border: none;
+          background: #f1f5f9;
+          color: #1e293b;
+          padding: 8px 14px;
+          border-radius: 999px;
+          font-size: 14px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+        nav button[data-active="true"] {
+          background: linear-gradient(135deg, #2563eb, #4f46e5);
+          color: white;
+          box-shadow: 0 10px 20px rgba(79, 70, 229, 0.25);
+        }
+        nav button:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+        section {
+          padding: 20px;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 13px;
+        }
+        th, td {
+          padding: 10px 12px;
+          border-bottom: 1px solid #e2e8f0;
+          text-align: left;
+        }
+        th {
+          font-size: 12px;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          color: #64748b;
+          background: #f8fafc;
+        }
+        tr:hover {
+          background: #f8fafc;
+        }
+        tr.empty td {
+          text-align: center;
+          font-style: italic;
+          color: #94a3b8;
+        }
+        .secondary {
+          color: #64748b;
+          font-size: 12px;
+        }
+        .pagination {
+          margin-top: 16px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          font-size: 13px;
+        }
+        .pagination button {
+          border: none;
+          background: #e0e7ff;
+          color: #312e81;
+          padding: 8px 12px;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: background 0.2s ease;
+        }
+        .pagination button:hover:not(:disabled) {
+          background: #c7d2fe;
+        }
+        .pagination button:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+        .status {
+          padding: 0 20px 16px;
+          font-size: 13px;
+          color: #dc2626;
+          min-height: 16px;
+        }
+      </style>
+      <header>
+        <h2>${this.escapeHtml(view.header)}</h2>
+        <nav>
+          <button type="button" data-tab="customers" data-active="${activeTab === "customers"}" aria-pressed="${activeTab === "customers"}">Clientes</button>
+          <button type="button" data-tab="contracts" data-active="${activeTab === "contracts"}" aria-pressed="${activeTab === "contracts"}">Contratos</button>
+        </nav>
+      </header>
+      <section>
+        <table>
+          <thead>
+            <tr>${view.columns}</tr>
+          </thead>
+          <tbody>
+            ${view.rows}
+          </tbody>
+        </table>
+        ${this.renderPagination(view.pagination)}
+      </section>
+      <div class="status">${this.state.error ? this.escapeHtml(this.state.error) : ""}</div>
+    `;
+
+    this.shadowRoot.querySelectorAll("nav button").forEach((button) => {
+      button.addEventListener("click", this.handleTabClick);
+    });
+
+    this.shadowRoot.querySelectorAll(".pagination button").forEach((button) => {
+      button.addEventListener("click", this.handlePaginationClick);
+    });
+  }
+}
+
+customElements.define("utility-crm-dashboard", UtilityCrmDashboard);
