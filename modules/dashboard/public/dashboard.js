@@ -50,6 +50,11 @@ const ARCHITECTURE_STYLES = `
   background: transparent;
 }
 
+.react-flow__edges,
+.react-flow__edge {
+  z-index: 10;
+}
+
 .domain-node {
   background-color: var(--bs-tertiary-bg, #f8f9fa);
   border: 1px solid rgba(0, 0, 0, 0.08);
