@@ -1,5 +1,13 @@
-import React, { useEffect, useState, useRef } from "https://esm.sh/react@18";
+import React, { useEffect, useState, useRef, useMemo } from "https://esm.sh/react@18";
 import { createRoot } from "https://esm.sh/react-dom@18/client";
+import { marked } from "https://esm.sh/marked@12";
+
+marked.setOptions({
+  breaks: true,
+  gfm: true,
+  mangle: false,
+  headerIds: false,
+});
 
 const { createElement } = React;
 
@@ -99,6 +107,21 @@ function WidgetContainer({ widget }) {
   const popupRef = useRef(null);
   const iconButtonRef = useRef(null);
   const readmeModule = widget.readmeModule || widget.module || widget.id;
+
+  const readmeHtml = useMemo(() => {
+    if (!readmeContent) {
+      return "";
+    }
+    try {
+      return marked.parse(readmeContent);
+    } catch (parseError) {
+      console.warn(
+        `[dashboard] No se pudo renderizar el README de ${readmeModule}:`,
+        parseError
+      );
+      return "";
+    }
+  }, [readmeContent, readmeModule]);
 
   useEffect(() => {
     let cancelled = false;
@@ -245,7 +268,7 @@ function WidgetContainer({ widget }) {
         {
           type: "button",
           className:
-            "btn btn-light btn-sm position-absolute top-0 start-0 m-2 rounded-circle shadow-sm border-0",
+            "btn btn-light btn-sm position-absolute top-0 end-0 m-2 rounded-circle shadow-sm border-0",
           style: {
             width: "2.25rem",
             height: "2.25rem",
@@ -274,7 +297,8 @@ function WidgetContainer({ widget }) {
               "position-absolute bg-white border rounded shadow-sm p-3 small",
             style: {
               top: "3rem",
-              left: "1rem",
+              left: "auto",
+              right: "1rem",
               zIndex: 20,
               width: "min(22rem, calc(100% - 2rem))",
               maxHeight: "18rem",
@@ -296,17 +320,24 @@ function WidgetContainer({ widget }) {
               )
             : readmeError
               ? createElement("p", { className: "mb-0 text-danger" }, readmeError)
-              : createElement(
-                  "pre",
-                  {
-                    className: "mb-0 text-body-secondary",
-                    style: {
-                      whiteSpace: "pre-wrap",
-                      fontFamily: "var(--bs-font-monospace, 'SFMono-Regular', monospace)",
+              : readmeHtml
+                ? createElement("div", {
+                    className: "mb-0 text-body-secondary d-block",
+                    style: { whiteSpace: "normal" },
+                    dangerouslySetInnerHTML: { __html: readmeHtml },
+                  })
+                : createElement(
+                    "pre",
+                    {
+                      className: "mb-0 text-body-secondary",
+                      style: {
+                        whiteSpace: "pre-wrap",
+                        fontFamily:
+                          "var(--bs-font-monospace, 'SFMono-Regular', monospace)",
+                      },
                     },
-                  },
-                  readmeContent
-                )
+                    readmeContent
+                  )
         ),
       createElement(
         "div",
