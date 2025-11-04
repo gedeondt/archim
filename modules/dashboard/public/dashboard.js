@@ -9,6 +9,7 @@ const DEFAULT_MODULE_WIDGETS = [
     title: "Queue Monitor",
     url: "http://localhost:4200/microfrontends/queue-monitor.js",
     tagName: "queue-monitor",
+    readmeModule: "queue",
   },
   {
     id: "mysql-simulator",
@@ -18,6 +19,7 @@ const DEFAULT_MODULE_WIDGETS = [
     props: {
       "metrics-url": "http://localhost:4500/metrics",
     },
+    readmeModule: "mysql-simulator",
   },
   {
     id: "dynamodb-simulator",
@@ -27,6 +29,7 @@ const DEFAULT_MODULE_WIDGETS = [
     props: {
       "metrics-url": "http://localhost:4600/metrics",
     },
+    readmeModule: "dynamodb-simulator",
   },
   {
     id: "s3-simulator",
@@ -36,6 +39,7 @@ const DEFAULT_MODULE_WIDGETS = [
     props: {
       "metrics-url": "http://localhost:4800/metrics",
     },
+    readmeModule: "s3-simulator",
   },
 ];
 
@@ -87,7 +91,14 @@ function loadMicrofrontendScript(url) {
 
 function WidgetContainer({ widget }) {
   const [error, setError] = useState(null);
+  const [isReadmeOpen, setIsReadmeOpen] = useState(false);
+  const [readmeContent, setReadmeContent] = useState("");
+  const [isReadmeLoading, setIsReadmeLoading] = useState(false);
+  const [readmeError, setReadmeError] = useState(null);
   const containerRef = useRef(null);
+  const popupRef = useRef(null);
+  const iconButtonRef = useRef(null);
+  const readmeModule = widget.readmeModule || widget.module || widget.id;
 
   useEffect(() => {
     let cancelled = false;
@@ -125,6 +136,83 @@ function WidgetContainer({ widget }) {
     };
   }, [widget]);
 
+  useEffect(() => {
+    setIsReadmeOpen(false);
+    setReadmeContent("");
+    setReadmeError(null);
+  }, [readmeModule]);
+
+  useEffect(() => {
+    if (!isReadmeOpen) {
+      return undefined;
+    }
+
+    function handleGlobalClick(event) {
+      const popupNode = popupRef.current;
+      const buttonNode = iconButtonRef.current;
+      const target = event.target;
+
+      if (
+        popupNode &&
+        !popupNode.contains(target) &&
+        buttonNode &&
+        !buttonNode.contains(target)
+      ) {
+        setIsReadmeOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleGlobalClick);
+    document.addEventListener("touchstart", handleGlobalClick);
+
+    return () => {
+      document.removeEventListener("mousedown", handleGlobalClick);
+      document.removeEventListener("touchstart", handleGlobalClick);
+    };
+  }, [isReadmeOpen]);
+
+  async function openReadme() {
+    if (!readmeModule) {
+      setReadmeError("No README configured for this widget");
+      setIsReadmeOpen(true);
+      return;
+    }
+
+    if (isReadmeLoading) {
+      setIsReadmeOpen(true);
+      return;
+    }
+
+    if (!readmeContent || readmeError) {
+      try {
+        setIsReadmeLoading(true);
+        setReadmeError(null);
+        const response = await fetch(`/readme/${encodeURIComponent(readmeModule)}`);
+        if (!response.ok) {
+          throw new Error(`No se pudo cargar el README (${response.status})`);
+        }
+        const text = await response.text();
+        setReadmeContent(text);
+        setReadmeError(null);
+      } catch (readmeFetchError) {
+        setReadmeError(readmeFetchError.message || "No se pudo cargar el README");
+        setReadmeContent("");
+      } finally {
+        setIsReadmeLoading(false);
+      }
+    }
+
+    setIsReadmeOpen(true);
+  }
+
+  function handleReadmeClick() {
+    if (isReadmeOpen) {
+      setIsReadmeOpen(false);
+      return;
+    }
+    openReadme();
+  }
+
   if (error) {
     return createElement(
       "div",
@@ -151,7 +239,75 @@ function WidgetContainer({ widget }) {
     { className: "col-12 col-md-6 col-xl-4" },
     createElement(
       "div",
-      { className: "card h-100 shadow-sm border-0" },
+      { className: "card h-100 shadow-sm border-0 position-relative" },
+      createElement(
+        "button",
+        {
+          type: "button",
+          className:
+            "btn btn-light btn-sm position-absolute top-0 start-0 m-2 rounded-circle shadow-sm border-0",
+          style: {
+            width: "2.25rem",
+            height: "2.25rem",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 10,
+          },
+          onClick: handleReadmeClick,
+          ref: iconButtonRef,
+          title: readmeModule
+            ? `Ver README de ${readmeModule}`
+            : "Ver README del módulo",
+          "aria-label": readmeModule
+            ? `Abrir README de ${readmeModule}`
+            : "Abrir README del módulo",
+        },
+        "📄"
+      ),
+      isReadmeOpen &&
+        createElement(
+          "div",
+          {
+            ref: popupRef,
+            className:
+              "position-absolute bg-white border rounded shadow-sm p-3 small",
+            style: {
+              top: "3rem",
+              left: "1rem",
+              zIndex: 20,
+              width: "min(22rem, calc(100% - 2rem))",
+              maxHeight: "18rem",
+              overflowY: "auto",
+              boxShadow:
+                "0 0.5rem 1rem rgba(33, 37, 41, 0.15), 0 0 0 1px rgba(33, 37, 41, 0.05)",
+            },
+          },
+          createElement(
+            "div",
+            { className: "fw-semibold mb-2 text-secondary" },
+            widget.title
+          ),
+          isReadmeLoading
+            ? createElement(
+                "p",
+                { className: "mb-0 text-secondary" },
+                "Cargando README..."
+              )
+            : readmeError
+              ? createElement("p", { className: "mb-0 text-danger" }, readmeError)
+              : createElement(
+                  "pre",
+                  {
+                    className: "mb-0 text-body-secondary",
+                    style: {
+                      whiteSpace: "pre-wrap",
+                      fontFamily: "var(--bs-font-monospace, 'SFMono-Regular', monospace)",
+                    },
+                  },
+                  readmeContent
+                )
+        ),
       createElement(
         "div",
         { className: "card-header bg-body-secondary fw-semibold text-uppercase" },

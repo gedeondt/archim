@@ -7,6 +7,7 @@ const path = require("path");
 const PUBLIC_DIR = path.join(__dirname, "public");
 const DASHBOARD_HTML = path.join(PUBLIC_DIR, "index.html");
 const DASHBOARD_SCRIPT = path.join(PUBLIC_DIR, "dashboard.js");
+const MODULES_DIR = path.join(__dirname, "..");
 
 const DEFAULT_MODULE_WIDGETS = [
   {
@@ -18,6 +19,7 @@ const DEFAULT_MODULE_WIDGETS = [
       "metrics-url": "http://localhost:4200/metrics",
       "queues-url": "http://localhost:4200/queues",
     },
+    readmeModule: "queue",
   },
   {
     id: "event-log-monitor",
@@ -27,6 +29,7 @@ const DEFAULT_MODULE_WIDGETS = [
     props: {
       "metrics-url": "http://localhost:4400/metrics",
     },
+    readmeModule: "event-log",
   },
   {
     id: "mysql-simulator",
@@ -36,6 +39,7 @@ const DEFAULT_MODULE_WIDGETS = [
     props: {
       "metrics-url": "http://localhost:4500/metrics",
     },
+    readmeModule: "mysql-simulator",
   },
   {
     id: "dynamodb-simulator",
@@ -45,6 +49,7 @@ const DEFAULT_MODULE_WIDGETS = [
     props: {
       "metrics-url": "http://localhost:4600/metrics",
     },
+    readmeModule: "dynamodb-simulator",
   },
   {
     id: "redis-simulator",
@@ -54,6 +59,7 @@ const DEFAULT_MODULE_WIDGETS = [
     props: {
       "metrics-url": "http://localhost:4700/metrics",
     },
+    readmeModule: "redis-simulator",
   },
   {
     id: "s3-simulator",
@@ -63,6 +69,7 @@ const DEFAULT_MODULE_WIDGETS = [
     props: {
       "metrics-url": "http://localhost:4800/metrics",
     },
+    readmeModule: "s3-simulator",
   },
 ];
 
@@ -123,6 +130,20 @@ function sendText(response, statusCode, body, contentType) {
   response.end(body);
 }
 
+function sanitizeModuleName(moduleName = "") {
+  if (typeof moduleName !== "string") {
+    return null;
+  }
+  const trimmed = moduleName.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (!/^[a-zA-Z0-9_-]+$/.test(trimmed)) {
+    return null;
+  }
+  return trimmed;
+}
+
 function start({ port = 4300, widgets } = {}) {
   return new Promise(async (resolve, reject) => {
     try {
@@ -135,21 +156,61 @@ function start({ port = 4300, widgets } = {}) {
     const dashboardConfig = createDashboardConfig(widgets);
     const server = http.createServer(async (request, response) => {
       const { url: requestUrl = "/" } = request;
+      const parsedUrl = new URL(requestUrl, "http://localhost");
+      const { pathname } = parsedUrl;
       try {
-        if (requestUrl === "/" || requestUrl === "/index.html") {
+        if (pathname === "/" || pathname === "/index.html") {
           const html = await loadFile(DASHBOARD_HTML);
           sendText(response, 200, html, "text/html; charset=utf-8");
           return;
         }
 
-        if (requestUrl === "/dashboard.js") {
+        if (pathname === "/dashboard.js") {
           const script = await loadFile(DASHBOARD_SCRIPT);
           sendText(response, 200, script, "application/javascript; charset=utf-8");
           return;
         }
 
-        if (requestUrl === "/dashboard-config.json") {
+        if (pathname === "/dashboard-config.json") {
           sendJson(response, 200, dashboardConfig);
+          return;
+        }
+
+        if (pathname.startsWith("/readme/")) {
+          const requestedModule = sanitizeModuleName(
+            decodeURIComponent(pathname.replace("/readme/", ""))
+          );
+          if (!requestedModule) {
+            sendText(
+              response,
+              400,
+              "Invalid module name",
+              "text/plain; charset=utf-8"
+            );
+            return;
+          }
+
+          const readmePath = path.join(MODULES_DIR, requestedModule, "README.md");
+          try {
+            const readmeContents = await loadFile(readmePath);
+            sendText(
+              response,
+              200,
+              readmeContents,
+              "text/markdown; charset=utf-8"
+            );
+          } catch (error) {
+            if (error && error.code === "ENOENT") {
+              sendText(
+                response,
+                404,
+                "README not found",
+                "text/plain; charset=utf-8"
+              );
+            } else {
+              throw error;
+            }
+          }
           return;
         }
 
