@@ -96,36 +96,80 @@ async function getFirstRow(connection, query, params) {
   return null;
 }
 
+function parseId(value) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "bigint") {
+    const asNumber = Number(value);
+    return Number.isFinite(asNumber) ? asNumber : null;
+  }
+  if (typeof value === "string") {
+    if (value === "") {
+      return null;
+    }
+    const parsed = Number.parseInt(value, 10);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  return null;
+}
+
 async function ensureCustomer(connection, customer, createdAt) {
   const firstName = sanitizeText(customer.firstName);
   const lastName = sanitizeText(customer.lastName);
   const dni = sanitizeText(customer.dni);
 
   if (dni) {
+    console.debug(
+      `[event-log-to-crm] Buscando cliente por DNI`,
+      { dni, firstName, lastName, createdAt }
+    );
     const existing = await getFirstRow(connection, "SELECT id FROM customers WHERE dni = ? LIMIT 1", [dni]);
-    if (existing && typeof existing.id === "number") {
-      return existing.id;
+    const existingId = existing ? parseId(existing.id) : null;
+    if (existingId) {
+      console.debug("[event-log-to-crm] Cliente encontrado por DNI", { id: existingId, dni });
+      return existingId;
     }
   }
 
+  console.debug("[event-log-to-crm] Insertando nuevo cliente", {
+    firstName,
+    lastName,
+    dni,
+    createdAt,
+  });
   const [result] = await connection.execute(
     "INSERT INTO customers (first_name, last_name, dni, created_at) VALUES (?, ?, ?, ?)",
     [firstName, lastName, dni, createdAt]
   );
 
-  if (result && typeof result.insertId === "number" && result.insertId > 0) {
-    return result.insertId;
+  const insertId = result ? parseId(result.insertId) : null;
+  if (insertId) {
+    console.debug("[event-log-to-crm] Cliente insertado", { id: insertId, dni, firstName, lastName });
+    return insertId;
   }
 
   const fallbackQuery = dni
     ? "SELECT id FROM customers WHERE dni = ? ORDER BY id DESC LIMIT 1"
     : "SELECT id FROM customers WHERE first_name = ? AND last_name = ? AND created_at = ? ORDER BY id DESC LIMIT 1";
   const fallbackParams = dni ? [dni] : [firstName, lastName, createdAt];
+  console.debug("[event-log-to-crm] Buscando cliente por fallback", { query: fallbackQuery, params: fallbackParams });
   const fallback = await getFirstRow(connection, fallbackQuery, fallbackParams);
-  if (fallback && typeof fallback.id === "number") {
-    return fallback.id;
+  const fallbackId = fallback ? parseId(fallback.id) : null;
+  if (fallbackId) {
+    console.debug("[event-log-to-crm] Cliente encontrado por fallback", { id: fallbackId, query: fallbackQuery });
+    return fallbackId;
   }
 
+  console.error("[event-log-to-crm] No se pudo determinar el cliente persistido", {
+    firstName,
+    lastName,
+    dni,
+    createdAt,
+  });
   throw new Error("No se pudo determinar el cliente persistido");
 }
 
@@ -139,14 +183,17 @@ async function ensureSupplyPoint(connection, customerId, supplyPoint, createdAt)
       "SELECT id, customer_id, address FROM supply_points WHERE cups = ? LIMIT 1",
       [cups]
     );
-    if (existing && typeof existing.id === "number") {
-      if (existing.customer_id !== customerId || sanitizeText(existing.address) !== address) {
+    const existingId = existing ? parseId(existing.id) : null;
+    if (existingId) {
+      const existingCustomerId = existing ? parseId(existing.customer_id) : null;
+      const existingAddress = existing ? sanitizeText(existing.address) : "";
+      if (existingCustomerId !== customerId || existingAddress !== address) {
         await connection.execute(
           "UPDATE supply_points SET customer_id = ?, address = ?, created_at = ? WHERE id = ?",
-          [customerId, address, createdAt, existing.id]
+          [customerId, address, createdAt, existingId]
         );
       }
-      return existing.id;
+      return existingId;
     }
   }
 
@@ -155,8 +202,9 @@ async function ensureSupplyPoint(connection, customerId, supplyPoint, createdAt)
     [customerId, address, cups, createdAt]
   );
 
-  if (result && typeof result.insertId === "number" && result.insertId > 0) {
-    return result.insertId;
+  const insertId = result ? parseId(result.insertId) : null;
+  if (insertId) {
+    return insertId;
   }
 
   const fallback = await getFirstRow(
@@ -164,8 +212,9 @@ async function ensureSupplyPoint(connection, customerId, supplyPoint, createdAt)
     "SELECT id FROM supply_points WHERE cups = ? ORDER BY id DESC LIMIT 1",
     [cups]
   );
-  if (fallback && typeof fallback.id === "number") {
-    return fallback.id;
+  const fallbackId = fallback ? parseId(fallback.id) : null;
+  if (fallbackId) {
+    return fallbackId;
   }
 
   throw new Error("No se pudo determinar el punto de suministro persistido");
@@ -186,10 +235,11 @@ async function upsertContract(connection, supplyPointId, order, recordedAt) {
     [orderId]
   );
 
-  if (existing && typeof existing.id === "number") {
+  const existingId = existing ? parseId(existing.id) : null;
+  if (existingId) {
     await connection.execute(
       "UPDATE contracts SET supply_point_id = ?, tariff_code = ?, tariff_name = ?, status = ?, recorded_at = ?, raw_payload = ? WHERE id = ?",
-      [supplyPointId, tariffCode, tariffName, status, recordedAt, rawPayload, existing.id]
+      [supplyPointId, tariffCode, tariffName, status, recordedAt, rawPayload, existingId]
     );
     return;
   }
