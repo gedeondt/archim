@@ -148,6 +148,27 @@ function resolveManifestModule(manifestDir, modulePath) {
   return path.resolve(process.cwd(), modulePath);
 }
 
+function hasDesign(manifest) {
+  return (
+    manifest &&
+    manifest.design &&
+    typeof manifest.design === "object" &&
+    !Array.isArray(manifest.design) &&
+    Object.keys(manifest.design).length > 0
+  );
+}
+
+function mergeArchitectureDesign(options, manifest) {
+  if (!hasDesign(manifest)) {
+    return options || {};
+  }
+  const mergedOptions = options ? { ...options } : {};
+  if (mergedOptions.architectureDesign === undefined) {
+    mergedOptions.architectureDesign = manifest.design;
+  }
+  return mergedOptions;
+}
+
 async function launchArchitecture(definition, launchedPieces) {
   const { name, manifest, manifestDir } = definition;
   console.info(`[launcher] Launching architecture '${name}' (${definition.manifestPath})`);
@@ -162,7 +183,7 @@ async function launchArchitecture(definition, launchedPieces) {
       const metadata = await launchPiece({
         modulePath: scriptPath,
         port: phase.port,
-        options: phase.options || {},
+        options: mergeArchitectureDesign(phase.options, manifest),
       });
       metadata.phase = phaseName;
       metadata.architecture = name;
@@ -179,7 +200,7 @@ async function launchArchitecture(definition, launchedPieces) {
         const metadata = await launchPiece({
           modulePath: resolvedModulePath,
           port: piece.port,
-          options: piece.options || {},
+          options: mergeArchitectureDesign(piece.options, manifest),
         });
         metadata.phase = phaseName;
         metadata.architecture = name;
