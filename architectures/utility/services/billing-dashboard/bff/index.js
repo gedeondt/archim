@@ -485,7 +485,7 @@ function createServer(config) {
 }
 
 async function start(options = {}) {
-  const port = options.port || 6000;
+  const port = options.port || 6100;
   const mysqlConfig = options.mysql || {};
   const pool = mysql.createPool({
     host: mysqlConfig.host || "localhost",

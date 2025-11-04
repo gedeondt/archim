@@ -78,10 +78,10 @@
                 {
                   "id": "utility-billing-dashboard",
                   "title": "Facturación CRM",
-                  "url": "http://localhost:6000/microfront/billing-dashboard.js",
+                  "url": "http://localhost:6100/microfront/billing-dashboard.js",
                   "tagName": "utility-billing-dashboard",
                   "props": {
-                    "api-base-url": "http://localhost:6000",
+                    "api-base-url": "http://localhost:6100",
                     "page-size": 5
                   }
                 }
@@ -163,7 +163,7 @@
         },
         {
           "module": "./architectures/utility/services/billing-dashboard/bff/index.js",
-          "port": 6000,
+          "port": 6100,
           "options": {
             "mysql": {
               "host": "localhost",
