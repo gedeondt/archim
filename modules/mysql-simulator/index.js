@@ -98,6 +98,21 @@ function ensureDataDirectory() {
   }
 }
 
+function clearDataDirectory() {
+  if (!fs.existsSync(dataDirectory)) {
+    return;
+  }
+
+  for (const entry of fs.readdirSync(dataDirectory)) {
+    const entryPath = path.join(dataDirectory, entry);
+    try {
+      fs.rmSync(entryPath, { recursive: true, force: true });
+    } catch (error) {
+      console.warn(`[mysql-simulator] Failed to remove ${entryPath}: ${error.message}`);
+    }
+  }
+}
+
 function sanitizeDatabaseName(name) {
   return String(name || "default").trim().replace(/[^A-Za-z0-9_]/g, "_") || "default";
 }
@@ -1117,6 +1132,7 @@ function startHttpServer(port) {
 async function start({ port = 4500, mysqlPort = 3307 } = {}) {
   closeDatabases();
   state.queryCount = 0;
+  clearDataDirectory();
   ensureDataDirectory();
   const [mysqlServer, httpServer] = await Promise.all([
     startMySqlServer(mysqlPort),
