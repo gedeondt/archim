@@ -1021,16 +1021,28 @@ function handleCommand(connection, payload, sequenceId) {
 
 function startMySqlServer(port) {
   const serverState = { nextConnectionId: 0 };
-  const server = net.createServer(createConnectionHandler(serverState));
+  const connections = new Set();
+  const connectionHandler = createConnectionHandler(serverState);
+  const server = net.createServer((socket) => {
+    connections.add(socket);
+    socket.on("close", () => {
+      connections.delete(socket);
+    });
+    connectionHandler(socket);
+  });
   return new Promise((resolve, reject) => {
     server.on("error", reject);
     server.listen(port, () => {
       console.info(`[mysql-simulator] Listening for MySQL connections on port ${port}`);
       resolve({
         server,
-        stop: () => new Promise((stopResolve) => {
-          server.close(() => stopResolve());
-        }),
+        stop: () =>
+          new Promise((stopResolve) => {
+            for (const socket of connections) {
+              socket.destroy();
+            }
+            server.close(() => stopResolve());
+          }),
       });
     });
   });
@@ -1044,6 +1056,7 @@ function getMicrofrontendScript() {
 }
 
 function startHttpServer(port) {
+  const connections = new Set();
   const server = http.createServer((request, response) => {
     if (request.method === "OPTIONS") {
       response.writeHead(204, {
@@ -1077,14 +1090,25 @@ function startHttpServer(port) {
     response.end("Not Found");
   });
 
+  server.on("connection", (socket) => {
+    connections.add(socket);
+    socket.on("close", () => {
+      connections.delete(socket);
+    });
+  });
+
   return new Promise((resolve) => {
     server.listen(port, () => {
       console.info(`[mysql-simulator] HTTP metrics server running on port ${port}`);
       resolve({
         server,
-        stop: () => new Promise((stopResolve) => {
-          server.close(() => stopResolve());
-        }),
+        stop: () =>
+          new Promise((stopResolve) => {
+            for (const socket of connections) {
+              socket.destroy();
+            }
+            server.close(() => stopResolve());
+          }),
       });
     });
   });
