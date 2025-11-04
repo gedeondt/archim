@@ -63,6 +63,11 @@ const ARCHITECTURE_STYLES = `
   color: var(--bs-body-color, #212529);
   font-family: inherit;
   position: relative;
+  cursor: grab;
+}
+
+.react-flow__node.dragging .domain-node {
+  cursor: grabbing;
 }
 
 .domain-node__title {
@@ -280,7 +285,6 @@ function createArchitectureGraph(design) {
         services,
         domainKey,
       },
-      draggable: false,
       selectable: false,
     });
 
@@ -425,7 +429,7 @@ function ArchitectureDesignDiagram({ design }) {
         fitView: true,
         fitViewOptions: { padding: 0.2, includeHiddenNodes: true },
         nodesConnectable: false,
-        nodesDraggable: false,
+        nodesDraggable: true,
         elementsSelectable: false,
         zoomOnScroll: false,
         zoomOnPinch: false,
