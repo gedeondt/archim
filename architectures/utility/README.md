@@ -17,6 +17,8 @@ MySQL como CRM persistente.
    - Tabla `contracts`: tarifa seleccionada, estado y payload completo del pedido.
 4. El dashboard incorpora dos widgets: el formulario ecommerce y el monitor del event log para
    observar los pedidos registrados.
+5. Un tercer widget, **Utility CRM Dashboard**, consulta el CRM mediante su BFF para mostrar
+   clientes y contratos con paginación.
 
 ## Componentes
 
@@ -29,11 +31,16 @@ MySQL como CRM persistente.
   - `services/ecommerce/bff/index.js`: expone `/api/orders`, publica eventos y sirve el microfront.
   - `services/ecommerce/microfront/EcommerceForm.microfrontend`: web component con el formulario de
     contratación.
+  - `services/crm-dashboard/bff/index.js`: expone el microfront de CRM y endpoints paginados para
+    `/api/crm/customers` y `/api/crm/contracts`.
+  - `services/crm-dashboard/microfront/CrmDashboard.microfrontend`: web component con dos pestañas
+    (clientes y contratos) que consumen el BFF.
 
 ## Puesta en marcha manual
 
 1. Ejecuta `node launcher.js --architecture utility` para iniciar los simuladores, aplicar el
    esquema y levantar los servicios.
-2. Accede al dashboard en `http://localhost:4300` y localiza el widget **Utility Ecommerce**.
+2. Accede al dashboard en `http://localhost:4300` y localiza los widgets **Utility Ecommerce**,
+   **Eventos ecommerce** y **Utility CRM Dashboard**.
 3. Completa el formulario y emite un pedido. Verás el evento en el widget de event log y los datos
    estructurados en la base `crm` del simulador MySQL.
