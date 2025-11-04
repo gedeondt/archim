@@ -762,7 +762,14 @@ async function executeSql(sequenceId, connection, sql, parameters = [], options 
     }
 
     if (upper.startsWith("CREATE DATABASE")) {
-      const name = trimmed.replace(/CREATE DATABASE/i, "").replace(/;$/, "").trim();
+      const name = trimmed
+        .replace(/^CREATE\s+DATABASE\s+/i, "")
+        .replace(/^IF\s+NOT\s+EXISTS\s+/i, "")
+        .replace(/;$/, "")
+        .trim();
+      if (!name) {
+        return [buildErrPacket(sequenceId, { message: "Database name is required" })];
+      }
       await refreshDatabaseMetadata(name).catch(() => {});
       return [buildOkPacket(sequenceId, { message: `Database ${name} created` })];
     }
