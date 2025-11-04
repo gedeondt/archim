@@ -7,7 +7,7 @@ import ReactFlow, {
   MarkerType,
   useEdgesState,
   useNodesState,
-} from "https://esm.sh/reactflow@11?bundle";
+} from "https://esm.sh/reactflow@11?bundle&deps=react@18,react-dom@18";
 
 marked.setOptions({
   breaks: true,
