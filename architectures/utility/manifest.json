@@ -1,4 +1,30 @@
 {
+  "design": {
+    "sales": {
+      "name": "Sales",
+      "services": [
+        { "name": "Utility Ecommerce Form", "type": "frontend" },
+        { "name": "Utility Ecommerce BFF", "type": "bff" }
+      ]
+    },
+    "integrations": {
+      "name": "Integrations",
+      "services": [
+        { "name": "Event Log", "type": "event-bus" },
+        {
+          "name": "Event Log to CRM Worker",
+          "type": "integration",
+          "integrates": ["sales", "customer_care"]
+        }
+      ]
+    },
+    "customer_care": {
+      "name": "Customer Care",
+      "services": [
+        { "name": "CRM Database", "type": "database" }
+      ]
+    }
+  },
   "phases": [
     {
       "phase": "boot-infra",
