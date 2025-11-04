@@ -102,18 +102,30 @@ async function ensureCustomer(connection, customer, createdAt) {
   const dni = sanitizeText(customer.dni);
 
   if (dni) {
+    console.debug(
+      `[event-log-to-crm] Buscando cliente por DNI`,
+      { dni, firstName, lastName, createdAt }
+    );
     const existing = await getFirstRow(connection, "SELECT id FROM customers WHERE dni = ? LIMIT 1", [dni]);
     if (existing && typeof existing.id === "number") {
+      console.debug("[event-log-to-crm] Cliente encontrado por DNI", existing);
       return existing.id;
     }
   }
 
+  console.debug("[event-log-to-crm] Insertando nuevo cliente", {
+    firstName,
+    lastName,
+    dni,
+    createdAt,
+  });
   const [result] = await connection.execute(
     "INSERT INTO customers (first_name, last_name, dni, created_at) VALUES (?, ?, ?, ?)",
     [firstName, lastName, dni, createdAt]
   );
 
   if (result && typeof result.insertId === "number" && result.insertId > 0) {
+    console.debug("[event-log-to-crm] Cliente insertado", { id: result.insertId, dni, firstName, lastName });
     return result.insertId;
   }
 
@@ -121,11 +133,19 @@ async function ensureCustomer(connection, customer, createdAt) {
     ? "SELECT id FROM customers WHERE dni = ? ORDER BY id DESC LIMIT 1"
     : "SELECT id FROM customers WHERE first_name = ? AND last_name = ? AND created_at = ? ORDER BY id DESC LIMIT 1";
   const fallbackParams = dni ? [dni] : [firstName, lastName, createdAt];
+  console.debug("[event-log-to-crm] Buscando cliente por fallback", { query: fallbackQuery, params: fallbackParams });
   const fallback = await getFirstRow(connection, fallbackQuery, fallbackParams);
   if (fallback && typeof fallback.id === "number") {
+    console.debug("[event-log-to-crm] Cliente encontrado por fallback", fallback);
     return fallback.id;
   }
 
+  console.error("[event-log-to-crm] No se pudo determinar el cliente persistido", {
+    firstName,
+    lastName,
+    dni,
+    createdAt,
+  });
   throw new Error("No se pudo determinar el cliente persistido");
 }
 
