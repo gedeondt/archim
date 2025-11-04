@@ -1,0 +1,361 @@
+class UtilityBillingDashboard extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: "open" });
+    this.state = {
+      activeTab: "customers",
+      customers: { items: [], page: 1, totalPages: 0, total: 0, loading: false },
+      contracts: { items: [], page: 1, totalPages: 0, total: 0, loading: false },
+      error: null,
+    };
+    this.handleTabClick = this.handleTabClick.bind(this);
+    this.handlePaginationClick = this.handlePaginationClick.bind(this);
+  }
+
+  connectedCallback() {
+    this.render();
+    this.loadResource("customers", 1);
+  }
+
+  static get observedAttributes() {
+    return ["api-base-url", "page-size"];
+  }
+
+  attributeChangedCallback() {
+    this.state.customers = { items: [], page: 1, totalPages: 0, total: 0, loading: false };
+    this.state.contracts = { items: [], page: 1, totalPages: 0, total: 0, loading: false };
+    this.render();
+    this.loadResource(this.state.activeTab, 1);
+  }
+
+  get apiBaseUrl() {
+    return this.getAttribute("api-base-url") || "";
+  }
+
+  get pageSize() {
+    const value = Number.parseInt(this.getAttribute("page-size"), 10);
+    if (Number.isNaN(value) || value <= 0) {
+      return 5;
+    }
+    return value;
+  }
+
+  buildApiUrl(resource, page) {
+    const base = this.apiBaseUrl.replace(/\/$/, "");
+    const url = new URL(`/api/billing/${resource}`, base || window.location.origin);
+    url.searchParams.set("page", String(page));
+    url.searchParams.set("pageSize", String(this.pageSize));
+    return url.toString();
+  }
+
+  setLoading(resource, value) {
+    this.state[resource] = {
+      ...this.state[resource],
+      loading: value,
+    };
+  }
+
+  setData(resource, payload) {
+    this.state[resource] = {
+      items: payload.data || [],
+      page: payload.pagination?.page || 1,
+      totalPages: payload.pagination?.totalPages || 0,
+      total: payload.pagination?.total || 0,
+      loading: false,
+    };
+  }
+
+  setError(message) {
+    this.state.error = message;
+  }
+
+  clearError() {
+    this.state.error = null;
+  }
+
+  async loadResource(resource, page) {
+    this.setLoading(resource, true);
+    this.clearError();
+    this.render();
+    try {
+      const response = await fetch(this.buildApiUrl(resource, page));
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => ({}));
+        const message = errorPayload?.error || `HTTP ${response.status}`;
+        throw new Error(message);
+      }
+      const payload = await response.json();
+      this.setData(resource, payload);
+    } catch (error) {
+      this.setData(resource, { data: [], pagination: { page: 1, totalPages: 0, total: 0 } });
+      const resourceLabel = resource === "customers" ? "los clientes" : "los contratos";
+      this.setError(`No se pudo cargar ${resourceLabel} de facturación: ${error.message}`);
+    }
+    this.render();
+  }
+
+  handleTabClick(event) {
+    const target = event.currentTarget;
+    const tab = target?.getAttribute("data-tab");
+    if (!tab || tab === this.state.activeTab) {
+      return;
+    }
+    this.state.activeTab = tab;
+    this.clearError();
+    this.render();
+    if (this.state[tab].items.length === 0 && !this.state[tab].loading) {
+      this.loadResource(tab, 1);
+    }
+  }
+
+  handlePaginationClick(event) {
+    const button = event.currentTarget;
+    const resource = button?.getAttribute("data-resource");
+    const direction = button?.getAttribute("data-direction");
+    if (!resource || !direction) {
+      return;
+    }
+    const current = this.state[resource];
+    if (current.loading) {
+      return;
+    }
+    let nextPage = current.page;
+    if (direction === "prev" && current.page > 1) {
+      nextPage -= 1;
+    } else if (direction === "next" && current.page < current.totalPages) {
+      nextPage += 1;
+    }
+    if (nextPage !== current.page) {
+      this.loadResource(resource, nextPage);
+    }
+  }
+
+  renderError() {
+    if (!this.state.error) {
+      return "";
+    }
+    return `<div class="error">${this.state.error}</div>`;
+  }
+
+  renderTable(resource) {
+    const state = this.state[resource];
+    if (state.loading) {
+      return `<div class="loading">Cargando ${resource === "customers" ? "clientes" : "contratos"}...</div>`;
+    }
+    if (!state.items.length) {
+      return `<div class="empty">No hay ${resource === "customers" ? "clientes" : "contratos"} registrados.</div>`;
+    }
+    if (resource === "customers") {
+      return `
+        <table>
+          <thead>
+            <tr>
+              <th>ID CRM</th>
+              <th>Nombre</th>
+              <th>DNI</th>
+              <th>Creado en CRM</th>
+              <th>Último evento</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${state.items
+              .map(
+                (customer) => `
+                  <tr>
+                    <td>${customer.crmCustomerId ?? "-"}</td>
+                    <td>${customer.fullName || "-"}</td>
+                    <td>${customer.dni || "-"}</td>
+                    <td>${customer.crmCreatedAt || "-"}</td>
+                    <td>${customer.lastEventAt || "-"}</td>
+                  </tr>
+                `
+              )
+              .join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    return `
+      <table>
+        <thead>
+          <tr>
+            <th>ID Contrato CRM</th>
+            <th>ID Cliente CRM</th>
+            <th>Pedido</th>
+            <th>Tarifa</th>
+            <th>Estado CRM</th>
+            <th>Estado facturación</th>
+            <th>CUPS</th>
+            <th>Último evento</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${state.items
+            .map(
+              (contract) => `
+                <tr>
+                  <td>${contract.crmContractId ?? "-"}</td>
+                  <td>${contract.crmCustomerId ?? "-"}</td>
+                  <td>
+                    <div class="order-id">${contract.orderId || "-"}</div>
+                    <small>${contract.customerName || "Sin cliente"}${contract.customerDni ? ` · ${contract.customerDni}` : ""}</small>
+                  </td>
+                  <td>
+                    <div>${contract.tariffName || "-"}</div>
+                    <small>${contract.tariffCode || ""}</small>
+                  </td>
+                  <td>${contract.crmStatus || "-"}</td>
+                  <td>${contract.billingStatus || "-"}</td>
+                  <td>${contract.cups || "-"}</td>
+                  <td>${contract.lastEventAt || "-"}</td>
+                </tr>
+              `
+            )
+            .join("")}
+        </tbody>
+      </table>
+    `;
+  }
+
+  renderPagination(resource) {
+    const state = this.state[resource];
+    if (!state.totalPages || state.totalPages <= 1) {
+      return "";
+    }
+    return `
+      <div class="pagination">
+        <button data-resource="${resource}" data-direction="prev" ${state.page === 1 ? "disabled" : ""}>Anterior</button>
+        <span>Página ${state.page} de ${state.totalPages}</span>
+        <button data-resource="${resource}" data-direction="next" ${state.page >= state.totalPages ? "disabled" : ""}>Siguiente</button>
+      </div>
+    `;
+  }
+
+  render() {
+    if (!this.shadowRoot) {
+      return;
+    }
+    const tabs = [
+      { id: "customers", label: "Clientes" },
+      { id: "contracts", label: "Contratos" },
+    ];
+
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host {
+          display: block;
+          font-family: Arial, sans-serif;
+          color: #1f2933;
+        }
+        .tabs {
+          display: flex;
+          gap: 8px;
+          margin-bottom: 16px;
+        }
+        .tabs button {
+          padding: 8px 16px;
+          border: 1px solid #d2d6dc;
+          background: #f5f7fa;
+          cursor: pointer;
+          border-radius: 4px;
+        }
+        .tabs button.active {
+          background: #2563eb;
+          color: white;
+          border-color: #2563eb;
+        }
+        .content {
+          border: 1px solid #d2d6dc;
+          border-radius: 4px;
+          padding: 16px;
+          background: white;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+        th, td {
+          border-bottom: 1px solid #e5e7eb;
+          padding: 8px;
+          text-align: left;
+          vertical-align: top;
+        }
+        th {
+          background: #f9fafb;
+          font-weight: 600;
+        }
+        .error {
+          background: #fee2e2;
+          border: 1px solid #fecaca;
+          color: #b91c1c;
+          padding: 12px;
+          margin-bottom: 16px;
+          border-radius: 4px;
+        }
+        .loading {
+          padding: 16px;
+          text-align: center;
+        }
+        .empty {
+          padding: 16px;
+          text-align: center;
+          color: #6b7280;
+        }
+        .pagination {
+          margin-top: 16px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        .pagination button {
+          padding: 8px 12px;
+          border: 1px solid #d2d6dc;
+          background: #f3f4f6;
+          cursor: pointer;
+          border-radius: 4px;
+        }
+        .pagination button[disabled] {
+          cursor: not-allowed;
+          opacity: 0.5;
+        }
+        .order-id {
+          font-weight: 600;
+        }
+        small {
+          color: #6b7280;
+        }
+      </style>
+      <div class="utility-billing-dashboard">
+        <div class="tabs">
+          ${tabs
+            .map(
+              (tab) => `
+                <button data-tab="${tab.id}" class="${tab.id === this.state.activeTab ? "active" : ""}">
+                  ${tab.label}
+                </button>
+              `
+            )
+            .join("")}
+        </div>
+        ${this.renderError()}
+        <div class="content">
+          ${this.renderTable(this.state.activeTab)}
+          ${this.renderPagination(this.state.activeTab)}
+        </div>
+      </div>
+    `;
+
+    this.shadowRoot.querySelectorAll(".tabs button").forEach((button) => {
+      button.addEventListener("click", this.handleTabClick);
+    });
+
+    this.shadowRoot.querySelectorAll(".pagination button").forEach((button) => {
+      button.addEventListener("click", this.handlePaginationClick);
+    });
+  }
+}
+
+if (!customElements.get("utility-billing-dashboard")) {
+  customElements.define("utility-billing-dashboard", UtilityBillingDashboard);
+}
