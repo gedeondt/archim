@@ -25,6 +25,14 @@
         { "name": "Utility CRM Dashboard", "type": "frontend" },
         { "name": "Utility CRM Dashboard BFF", "type": "bff" }
       ]
+    },
+    "billing": {
+      "name": "Billing",
+      "services": [
+        { "name": "Billing Database", "type": "database" },
+        { "name": "Utility Billing Dashboard", "type": "frontend" },
+        { "name": "Utility Billing BFF", "type": "bff" }
+      ]
     }
   },
   "phases": [
@@ -66,6 +74,16 @@
                     "api-base-url": "http://localhost:5900",
                     "page-size": 5
                   }
+                },
+                {
+                  "id": "utility-billing-dashboard",
+                  "title": "Facturación CRM",
+                  "url": "http://localhost:6000/microfront/billing-dashboard.js",
+                  "tagName": "utility-billing-dashboard",
+                  "props": {
+                    "api-base-url": "http://localhost:6000",
+                    "page-size": 5
+                  }
                 }
               ]
             }
@@ -99,7 +117,11 @@
             "pollIntervalMs": 4000,
             "eventLog": {
               "endpoint": "http://localhost:4400",
-              "queueName": "ecommerce"
+              "queueName": "ecommerce",
+              "publishQueues": {
+                "customerQueue": "crm-clients",
+                "contractQueue": "crm-contracts"
+              }
             },
             "mysql": {
               "host": "localhost",
@@ -137,6 +159,28 @@
             "microfrontPath": "./architectures/utility/services/crm-dashboard/microfront/CrmDashboard.microfrontend",
             "pageSize": 5,
             "maxPageSize": 25
+          }
+        },
+        {
+          "module": "./architectures/utility/services/billing-dashboard/bff/index.js",
+          "port": 6000,
+          "options": {
+            "mysql": {
+              "host": "localhost",
+              "port": 3307,
+              "user": "root",
+              "password": "",
+              "database": "billing"
+            },
+            "microfrontPath": "./architectures/utility/services/billing-dashboard/microfront/BillingDashboard.microfrontend",
+            "pageSize": 5,
+            "maxPageSize": 25,
+            "eventLog": {
+              "endpoint": "http://localhost:4400",
+              "customerQueue": "crm-clients",
+              "contractQueue": "crm-contracts",
+              "pollIntervalMs": 4000
+            }
           }
         }
       ]

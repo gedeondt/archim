@@ -1,71 +1,7 @@
 "use strict";
 
-const http = require("node:http");
-const https = require("node:https");
-const { URL } = require("node:url");
 const mysql = require("mysql2/promise");
-
-function normalizeBaseUrl(url) {
-  return url.replace(/\/$/, "");
-}
-
-function requestJson(method, targetUrl, body) {
-  const urlObject = new URL(targetUrl);
-  const isHttps = urlObject.protocol === "https:";
-  const payload = body !== undefined ? JSON.stringify(body) : null;
-  const options = {
-    method,
-    hostname: urlObject.hostname,
-    port: urlObject.port || (isHttps ? 443 : 80),
-    path: `${urlObject.pathname}${urlObject.search}`,
-    headers: {
-      ...(payload
-        ? { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) }
-        : {}),
-    },
-  };
-  const requestFn = isHttps ? https.request : http.request;
-
-  return new Promise((resolve, reject) => {
-    const req = requestFn(options, (res) => {
-      const chunks = [];
-      res.on("data", (chunk) => chunks.push(chunk));
-      res.on("end", () => {
-        const raw = Buffer.concat(chunks).toString("utf8");
-        const ok = res.statusCode >= 200 && res.statusCode < 300;
-        if (!ok) {
-          reject(new Error(`${method} ${targetUrl} respondió ${res.statusCode}: ${raw}`));
-          return;
-        }
-        if (!raw) {
-          resolve(null);
-          return;
-        }
-        try {
-          resolve(JSON.parse(raw));
-        } catch (error) {
-          resolve(raw);
-        }
-      });
-    });
-    req.on("error", reject);
-    if (payload) {
-      req.write(payload);
-    }
-    req.end();
-  });
-}
-
-async function fetchEvents(eventLogConfig, since) {
-  const baseUrl = normalizeBaseUrl(eventLogConfig.endpoint || "http://localhost:4400");
-  const queueName = encodeURIComponent(eventLogConfig.queueName || "ecommerce");
-  const url = `${baseUrl}/event-log/queues/${queueName}/events?since=${encodeURIComponent(since)}`;
-  const response = await requestJson("GET", url);
-  if (!response || !Array.isArray(response.events)) {
-    return [];
-  }
-  return response.events;
-}
+const { createEventLogClient } = require("../../../../lib/utility/event-log-client");
 
 function ensureOrderPayload(eventEntry) {
   if (!eventEntry || typeof eventEntry !== "object") {
@@ -115,6 +51,85 @@ function parseId(value) {
     return Number.isNaN(parsed) ? null : parsed;
   }
   return null;
+}
+
+function mapCustomerRow(row) {
+  if (!row) {
+    return null;
+  }
+  return {
+    id: parseId(row.id),
+    firstName: sanitizeText(row.first_name),
+    lastName: sanitizeText(row.last_name),
+    dni: sanitizeText(row.dni),
+    createdAt: row.created_at || null,
+  };
+}
+
+function mapSupplyPointRow(row) {
+  if (!row) {
+    return null;
+  }
+  return {
+    id: parseId(row.id),
+    customerId: parseId(row.customer_id),
+    address: sanitizeText(row.address),
+    cups: sanitizeText(row.cups),
+    createdAt: row.created_at || null,
+  };
+}
+
+function mapContractRow(row) {
+  if (!row) {
+    return null;
+  }
+  return {
+    id: parseId(row.id),
+    supplyPointId: parseId(row.supply_point_id),
+    orderId: row.order_id || null,
+    tariffCode: sanitizeText(row.tariff_code),
+    tariffName: sanitizeText(row.tariff_name),
+    status: sanitizeText(row.status),
+    recordedAt: row.recorded_at || null,
+    rawPayload: row.raw_payload || null,
+  };
+}
+
+async function fetchCustomerById(connection, customerId) {
+  if (!customerId) {
+    return null;
+  }
+  const row = await getFirstRow(
+    connection,
+    "SELECT id, first_name, last_name, dni, created_at FROM customers WHERE id = ? LIMIT 1",
+    [customerId]
+  );
+  return mapCustomerRow(row);
+}
+
+async function fetchSupplyPointById(connection, supplyPointId) {
+  if (!supplyPointId) {
+    return null;
+  }
+  const row = await getFirstRow(
+    connection,
+    "SELECT id, customer_id, address, cups, created_at FROM supply_points WHERE id = ? LIMIT 1",
+    [supplyPointId]
+  );
+  return mapSupplyPointRow(row);
+}
+
+async function fetchContractById(connection, contractId) {
+  if (!contractId) {
+    return null;
+  }
+  const row = await getFirstRow(
+    connection,
+    `SELECT id, supply_point_id, order_id, tariff_code, tariff_name, status, recorded_at, raw_payload
+     FROM contracts WHERE id = ? LIMIT 1`,
+    [contractId]
+  );
+  return mapContractRow(row);
 }
 
 async function ensureCustomer(connection, customer, createdAt) {
@@ -241,13 +256,21 @@ async function upsertContract(connection, supplyPointId, order, recordedAt) {
       "UPDATE contracts SET supply_point_id = ?, tariff_code = ?, tariff_name = ?, status = ?, recorded_at = ?, raw_payload = ? WHERE id = ?",
       [supplyPointId, tariffCode, tariffName, status, recordedAt, rawPayload, existingId]
     );
-    return;
+    return fetchContractById(connection, existingId);
   }
 
   await connection.execute(
     "INSERT INTO contracts (supply_point_id, order_id, tariff_code, tariff_name, status, recorded_at, raw_payload) VALUES (?, ?, ?, ?, ?, ?, ?)",
     [supplyPointId, orderId, tariffCode, tariffName, status, recordedAt, rawPayload]
   );
+
+  const created = await getFirstRow(
+    connection,
+    "SELECT id FROM contracts WHERE order_id = ? ORDER BY id DESC LIMIT 1",
+    [orderId]
+  );
+  const createdId = created ? parseId(created.id) : null;
+  return fetchContractById(connection, createdId);
 }
 
 async function persistOrder(connection, order, recordedAt) {
@@ -257,10 +280,102 @@ async function persistOrder(connection, order, recordedAt) {
   const createdAt = order.createdAt || recordedAt;
   const customerId = await ensureCustomer(connection, customer, createdAt);
   const supplyPointId = await ensureSupplyPoint(connection, customerId, supplyPoint, createdAt);
-  await upsertContract(connection, supplyPointId, order, recordedAt);
+  const contractRecord = await upsertContract(connection, supplyPointId, order, recordedAt);
+  const customerRecord = await fetchCustomerById(connection, customerId);
+  const supplyPointRecord = await fetchSupplyPointById(connection, supplyPointId);
+
+  return {
+    customer: customerRecord,
+    supplyPoint: supplyPointRecord,
+    contract: contractRecord,
+  };
 }
 
-async function processEvents(connection, events, state) {
+async function publishCrmEvents(eventLogClient, publishQueues, persisted, recordedAt) {
+  if (!eventLogClient || !publishQueues) {
+    return;
+  }
+
+  const tasks = [];
+  const customer = persisted.customer;
+  const supplyPoint = persisted.supplyPoint;
+  const contract = persisted.contract;
+  const customerQueue = publishQueues.customerQueue;
+  const contractQueue = publishQueues.contractQueue;
+
+  if (customer && customerQueue) {
+    const fullName = `${customer.firstName} ${customer.lastName}`.trim();
+    const payload = {
+      eventType: "crm.customer.created",
+      recordedAt,
+      source: "crm",
+      customer: {
+        id: customer.id,
+        firstName: customer.firstName,
+        lastName: customer.lastName,
+        fullName,
+        dni: customer.dni,
+        createdAt: customer.createdAt,
+      },
+    };
+    tasks.push(
+      eventLogClient.publishEvent(customerQueue, payload).catch((error) => {
+        console.error(`[event-log-to-crm] Error publicando evento de cliente: ${error.message}`);
+      })
+    );
+  }
+
+  if (contract && contractQueue) {
+    const payload = {
+      eventType: "crm.contract.created",
+      recordedAt,
+      source: "crm",
+      contract: {
+        id: contract.id,
+        orderId: contract.orderId,
+        tariffCode: contract.tariffCode,
+        tariffName: contract.tariffName,
+        status: contract.status,
+        recordedAt: contract.recordedAt,
+        supplyPointId: contract.supplyPointId,
+        rawPayload: contract.rawPayload,
+      },
+      supplyPoint: supplyPoint
+        ? {
+            id: supplyPoint.id,
+            customerId: supplyPoint.customerId,
+            address: supplyPoint.address,
+            cups: supplyPoint.cups,
+            createdAt: supplyPoint.createdAt,
+          }
+        : null,
+      customer: customer
+        ? {
+            id: customer.id,
+            firstName: customer.firstName,
+            lastName: customer.lastName,
+            dni: customer.dni,
+            createdAt: customer.createdAt,
+          }
+        : null,
+    };
+    if (supplyPoint && !payload.contract.cups) {
+      payload.contract.cups = supplyPoint.cups;
+    }
+    tasks.push(
+      eventLogClient.publishEvent(contractQueue, payload).catch((error) => {
+        console.error(`[event-log-to-crm] Error publicando evento de contrato: ${error.message}`);
+      })
+    );
+  }
+
+  if (tasks.length > 0) {
+    await Promise.all(tasks);
+  }
+}
+
+async function processEvents(connection, events, state, context = {}) {
+  const { eventLogClient, publishQueues } = context;
   for (const entry of events) {
     const recordedAt = entry.recordedAt || state.since;
     const order = ensureOrderPayload(entry);
@@ -277,7 +392,8 @@ async function processEvents(connection, events, state) {
 
     try {
       // eslint-disable-next-line no-await-in-loop
-      await persistOrder(connection, order, recordedAt);
+      const persisted = await persistOrder(connection, order, recordedAt);
+      await publishCrmEvents(eventLogClient, publishQueues, persisted, recordedAt);
       state.lastProcessedAt = recordedTime;
       console.info(`[event-log-to-crm] Pedido ${order.orderId || "(sin id)"} almacenado en CRM`);
     } catch (error) {
@@ -293,6 +409,8 @@ function start(options = {}) {
   const eventLogConfig = options.eventLog || {};
   const mysqlConfig = options.mysql || {};
   const pollIntervalMs = options.pollIntervalMs || 4000;
+  const eventLogClient = createEventLogClient(eventLogConfig);
+  const publishQueues = eventLogConfig.publishQueues || {};
 
   let stopped = false;
   let timer = null;
@@ -321,9 +439,9 @@ function start(options = {}) {
     timer = setTimeout(async () => {
       try {
         const connection = await connectionPromise;
-        const events = await fetchEvents(eventLogConfig, state.since);
+        const events = await eventLogClient.fetchEvents(state.since);
         if (events.length > 0) {
-          await processEvents(connection, events, state);
+          await processEvents(connection, events, state, { eventLogClient, publishQueues });
           if (state.lastProcessedAt) {
             const nextSince = new Date(state.lastProcessedAt.getTime() + 1);
             state.since = nextSince.toISOString();
@@ -362,6 +480,7 @@ module.exports = {
   start,
   metadata: {
     name: "event-log-to-crm",
-    description: "Replica eventos del log 'ecommerce' en el esquema CRM de MySQL",
+    description:
+      "Replica eventos del log 'ecommerce' en el esquema CRM de MySQL y publica eventos CRM para otros dominios",
   },
 };

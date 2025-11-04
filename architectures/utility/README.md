@@ -15,10 +15,13 @@ MySQL como CRM persistente.
    - Tabla `customers`: datos personales.
    - Tabla `supply_points`: dirección y CUPS asociados al cliente.
    - Tabla `contracts`: tarifa seleccionada, estado y payload completo del pedido.
-4. El dashboard incorpora dos widgets: el formulario ecommerce y el monitor del event log para
-   observar los pedidos registrados.
-5. Un tercer widget, **Utility CRM Dashboard**, consulta el CRM mediante su BFF para mostrar
-   clientes y contratos con paginación.
+   Tras persistir cada pedido, publica los eventos `crm.customer.created` y `crm.contract.created`
+   en las colas `crm-clients` y `crm-contracts` del event log.
+4. El dominio de facturación escucha dichas colas a través del BFF `utility-billing-bff`, replica
+   los clientes y contratos en su propia base de datos (`billing.customers` y `billing.contracts`) y
+   expone endpoints de consulta.
+5. El dashboard incorpora cuatro widgets: el formulario ecommerce, el monitor del event log, el
+   panel del CRM y el panel de facturación para visualizar la réplica.
 
 ## Componentes
 
@@ -35,12 +38,19 @@ MySQL como CRM persistente.
     `/api/crm/customers` y `/api/crm/contracts`.
   - `services/crm-dashboard/microfront/CrmDashboard.microfrontend`: web component con dos pestañas
     (clientes y contratos) que consumen el BFF.
+  - `services/billing-dashboard/bff/index.js`: replica los eventos de CRM hacia la base `billing`
+    y ofrece `/api/billing/customers` y `/api/billing/contracts`.
+  - `services/billing-dashboard/microfront/BillingDashboard.microfrontend`: panel web para explorar
+    la información de facturación.
+  - La carpeta `lib/utility` contiene utilidades compartidas, como el cliente ligero para publicar y
+    leer eventos del log.
 
 ## Puesta en marcha manual
 
 1. Ejecuta `node launcher.js --architecture utility` para iniciar los simuladores, aplicar el
    esquema y levantar los servicios.
 2. Accede al dashboard en `http://localhost:4300` y localiza los widgets **Utility Ecommerce**,
-   **Eventos ecommerce** y **Utility CRM Dashboard**.
+   **Eventos ecommerce**, **Utility CRM Dashboard** y **Facturación CRM**.
 3. Completa el formulario y emite un pedido. Verás el evento en el widget de event log y los datos
-   estructurados en la base `crm` del simulador MySQL.
+   estructurados en la base `crm` del simulador MySQL, así como la réplica en el panel de
+   facturación.
