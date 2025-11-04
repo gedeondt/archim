@@ -12,5 +12,7 @@ Cliente HTTP ligero para interactuar con el simulador de event log:
 - Se utiliza tanto en el middleware `event-log-to-crm` como en el BFF de facturación para evitar
   duplicar lógica de sondeo/publicación.
 
-Importa el módulo mediante `require("../../../../lib/utility/event-log-client")` desde las piezas de
-la arquitectura.
+Importa el módulo de forma relativa según la pieza que lo use, por ejemplo:
+
+- `services/billing-dashboard/bff/index.js`: `require("../../../lib/event-log-client")`.
+- `infra/middleware/event-log-to-crm.js`: `require("../../lib/event-log-client")`.

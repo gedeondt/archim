@@ -14,8 +14,22 @@ const DEFAULT_MICROFRONT_PATH = path.join(
 let cachedMicrofront = null;
 let cachedMicrofrontPath = null;
 
+function resolveMicrofrontPath(providedPath) {
+  if (!providedPath) {
+    return DEFAULT_MICROFRONT_PATH;
+  }
+  if (path.isAbsolute(providedPath)) {
+    return providedPath;
+  }
+  const fromCwd = path.resolve(process.cwd(), providedPath);
+  if (fs.existsSync(fromCwd)) {
+    return fromCwd;
+  }
+  return path.resolve(__dirname, providedPath);
+}
+
 function loadMicrofrontScript(customPath) {
-  const scriptPath = customPath || DEFAULT_MICROFRONT_PATH;
+  const scriptPath = resolveMicrofrontPath(customPath);
   if (!cachedMicrofront || cachedMicrofrontPath !== scriptPath) {
     cachedMicrofront = fs.readFileSync(scriptPath, "utf8");
     cachedMicrofrontPath = scriptPath;

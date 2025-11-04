@@ -1,7 +1,7 @@
 "use strict";
 
 const mysql = require("mysql2/promise");
-const { createEventLogClient } = require("../../../../lib/utility/event-log-client");
+const { createEventLogClient } = require("../../lib/event-log-client");
 
 function ensureOrderPayload(eventEntry) {
   if (!eventEntry || typeof eventEntry !== "object") {
