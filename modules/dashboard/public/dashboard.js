@@ -4,7 +4,9 @@ import { marked } from "https://esm.sh/marked@12";
 import ReactFlow, {
   Background,
   Controls,
+  Handle,
   MarkerType,
+  Position,
   useEdgesState,
   useNodesState,
 } from "https://esm.sh/reactflow@11?bundle&deps=react@18,react-dom@18";
@@ -55,6 +57,7 @@ const ARCHITECTURE_STYLES = `
   padding: 16px;
   color: var(--bs-body-color, #212529);
   font-family: inherit;
+  position: relative;
 }
 
 .domain-node__title {
@@ -80,6 +83,7 @@ const ARCHITECTURE_STYLES = `
   padding: 8px 10px;
   border: 1px solid rgba(0, 0, 0, 0.05);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  position: relative;
 }
 
 .domain-node__service-name {
@@ -269,6 +273,7 @@ function createArchitectureGraph(design) {
       data: {
         label: domainValue?.name || domainKey,
         services,
+        domainKey,
       },
       draggable: false,
       selectable: false,
@@ -300,6 +305,8 @@ function createArchitectureGraph(design) {
           labelBgPadding: [6, 4],
           labelBgBorderRadius: 4,
           labelStyle: { fontSize: 12 },
+          sourceHandle: `integration-${domainKey}-${serviceIndex}`,
+          targetHandle: "domain-target",
         });
       });
     });
@@ -311,10 +318,24 @@ function createArchitectureGraph(design) {
 function DomainNode({ data }) {
   const label = data?.label || "Dominio";
   const services = Array.isArray(data?.services) ? data.services : [];
+  const domainKey = data?.domainKey || "domain";
 
   return createElement(
     "div",
     { className: "domain-node" },
+    createElement(Handle, {
+      type: "target",
+      position: Position.Left,
+      id: "domain-target",
+      style: {
+        top: "50%",
+        transform: "translateY(-50%)",
+        left: -8,
+        width: 12,
+        height: 12,
+        background: "var(--bs-primary, #0d6efd)",
+      },
+    }),
     createElement("div", { className: "domain-node__title" }, label),
     services.length > 0
       ? createElement(
@@ -327,6 +348,22 @@ function DomainNode({ data }) {
                 key: `${service?.name || "service"}-${index}`,
                 className: "domain-node__service",
               },
+              service?.type === "integration"
+                ? createElement(Handle, {
+                    key: `integration-handle-${index}`,
+                    type: "source",
+                    position: Position.Right,
+                    id: `integration-${domainKey}-${index}`,
+                    style: {
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      right: -8,
+                      width: 12,
+                      height: 12,
+                      background: "var(--bs-primary, #0d6efd)",
+                    },
+                  })
+                : null,
               createElement(
                 "span",
                 { className: "domain-node__service-name" },
