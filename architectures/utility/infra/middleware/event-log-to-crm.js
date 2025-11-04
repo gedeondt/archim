@@ -131,10 +131,13 @@ async function processEvents(connection, events, state) {
     try {
       // eslint-disable-next-line no-await-in-loop
       await persistOrder(connection, order, recordedAt);
-      state.lastProcessedAt = new Date(recordedAt);
+      state.lastProcessedAt = recordedTime;
       console.info(`[event-log-to-crm] Pedido ${order.orderId || "(sin id)"} almacenado en CRM`);
     } catch (error) {
       console.error(`[event-log-to-crm] Error guardando pedido: ${error.message}`);
+      if (!state.lastProcessedAt || recordedTime.getTime() > state.lastProcessedAt.getTime()) {
+        state.lastProcessedAt = recordedTime;
+      }
     }
   }
 }
